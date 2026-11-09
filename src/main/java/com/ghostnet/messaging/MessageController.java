@@ -47,10 +47,18 @@ public class MessageController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/room")
-    public ResponseEntity<RoomMessageDto> sendRoomMessage(@Valid @RequestBody SendRoomMessageRequest request) {
+    @PostMapping({"/room", "/room/{roomId}"})
+    public ResponseEntity<RoomMessageDto> sendRoomMessage(
+            @PathVariable(required = false) String roomId,
+            @Valid @RequestBody SendRoomMessageRequest request) {
         UserRecord current = SecurityContext.requireUser();
-        RoomMessageDto sent = messagingService.sendRoomMessage(current.id(), request);
+        String effectiveRoomId = (roomId != null && !roomId.isBlank()) ? roomId : request.roomId();
+        SendRoomMessageRequest effectiveReq = new SendRoomMessageRequest(
+                effectiveRoomId,
+                request.content(),
+                request.clientMessageId()
+        );
+        RoomMessageDto sent = messagingService.sendRoomMessage(current.id(), effectiveReq);
         return ResponseEntity.ok(sent);
     }
 

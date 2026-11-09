@@ -33,6 +33,24 @@
   const sessionCount = document.getElementById('sessionCount');
   const networkInterfacesContainer = document.getElementById('networkInterfacesContainer');
 
+  const adminLoginModal = document.getElementById('adminLoginModal');
+  const adminLoginForm = document.getElementById('adminLoginForm');
+  const adminUsernameInput = document.getElementById('adminUsername');
+  const adminPasswordInput = document.getElementById('adminPassword');
+
+  function authFetch(url, options = {}) {
+    options.headers = options.headers || {};
+    const token = localStorage.getItem('ghostnet_token');
+    if (token) {
+      if (typeof options.headers.set === 'function') {
+        options.headers.set('Authorization', `Bearer ${token}`);
+      } else {
+        options.headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+    return fetch(url, options);
+  }
+
   function injectIcons() {
     if (typeof GhostNetIcons === 'undefined') return;
     const map = {
@@ -65,22 +83,64 @@
 
   async function checkAdminAuth() {
     try {
-      const res = await fetch('/api/auth/me');
+      const res = await authFetch('/api/auth/me');
       if (!res.ok) {
-        location.href = '/';
+        showAdminLoginModal();
         return;
       }
       const user = await res.json();
       if (user.role !== 'ROLE_ADMIN') {
-        alert('Access Denied: Host Administrator privileges (ROLE_ADMIN) required.');
-        location.href = '/';
+        showToast('Account lacks ROLE_ADMIN privileges. Please log in as Host Admin.', 'error');
+        showAdminLoginModal();
         return;
       }
+      adminLoginModal.classList.remove('active');
       loadAllAdminData();
       startPolling();
     } catch (e) {
-      location.href = '/';
+      showAdminLoginModal();
     }
+  }
+
+  function showAdminLoginModal() {
+    clearInterval(pollInterval);
+    adminLoginModal.classList.add('active');
+  }
+
+  if (adminLoginForm) {
+    adminLoginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = adminUsernameInput.value.trim();
+      const password = adminPasswordInput.value;
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.token) {
+            localStorage.setItem('ghostnet_token', data.token);
+          }
+          if (data.user.role !== 'ROLE_ADMIN') {
+            showToast('User authenticated, but account lacks ROLE_ADMIN privileges.', 'error');
+            return;
+          }
+          adminLoginModal.classList.remove('active');
+          showToast(`Welcome Host Administrator: ${data.user.displayName}`, 'success');
+          loadAllAdminData();
+          startPolling();
+        } else {
+          const err = await res.json();
+          showToast(err.message || 'Admin authentication failed', 'error');
+        }
+      } catch (err) {
+        showToast('Network error during authentication', 'error');
+      }
+    });
   }
 
   function startPolling() {
@@ -98,7 +158,7 @@
 
   async function loadMetrics() {
     try {
-      const res = await fetch('/api/admin/metrics');
+      const res = await authFetch('/api/admin/metrics');
       if (!res.ok) return;
       const m = await res.json();
 
@@ -124,7 +184,7 @@
 
   async function loadSessions() {
     try {
-      const res = await fetch('/api/admin/sessions');
+      const res = await authFetch('/api/admin/sessions');
       if (!res.ok) return;
       const sessions = await res.json();
       renderSessions(sessions);
@@ -176,7 +236,7 @@
 
   async function revokeSession(token) {
     try {
-      const res = await fetch(`/api/admin/sessions/${token}`, { method: 'DELETE' });
+      const res = await authFetch(`/api/admin/sessions/${token}`, { method: 'DELETE' });
       if (res.ok) {
         showToast('Session revoked', 'success');
         loadSessions();
@@ -190,7 +250,7 @@
 
   async function loadNetworkInterfaces() {
     try {
-      const res = await fetch('/api/admin/network');
+      const res = await authFetch('/api/admin/network');
       if (!res.ok) return;
       const interfaces = await res.json();
       renderNetworkInterfaces(interfaces);
@@ -225,7 +285,7 @@
     maintenanceFeedback.style.display = 'block';
     maintenanceFeedback.textContent = 'Generating atomic SQLite database snapshot...';
     try {
-      const res = await fetch('/api/admin/backup/create', { method: 'POST' });
+      const res = await authFetch('/api/admin/backup/create', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         maintenanceFeedback.textContent = `Snapshot created: ${data.filename} (${data.sizeBytes} bytes)`;
@@ -243,7 +303,7 @@
     maintenanceFeedback.style.display = 'block';
     maintenanceFeedback.textContent = 'Purging historical messages according to retention policy...';
     try {
-      const res = await fetch('/api/admin/retention/run', { method: 'POST' });
+      const res = await authFetch('/api/admin/retention/run', { method: 'POST' });
       const data = await res.json();
       maintenanceFeedback.textContent = `Purge completed: ${data.directMessagesPurged} direct messages and ${data.roomMessagesPurged} room messages deleted.`;
       showToast('Retention purge completed', 'success');
@@ -259,7 +319,7 @@
     const confirmation = prompt('Are you sure you want to shut down the GhostNet server? Type "SHUTDOWN" to confirm:');
     if (confirmation === 'SHUTDOWN') {
       try {
-        await fetch('/api/admin/shutdown', { method: 'POST' });
+        await authFetch('/api/admin/shutdown', { method: 'POST' });
         document.body.innerHTML = `
           <div style="height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #06090e; color: #f8fafc; font-family: sans-serif;">
             <h1 style="color: var(--neon-cyan); margin-bottom: 1rem;">GHOSTNET SERVER SHUT DOWN</h1>

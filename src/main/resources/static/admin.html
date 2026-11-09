@@ -141,6 +141,35 @@
 
   </main>
 
+  <!-- Inline Admin Login Modal -->
+  <div class="modal-overlay" id="adminLoginModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-title">Host Administrator Authentication</span>
+      </div>
+      <form class="modal-body" id="adminLoginForm">
+        <div style="padding: 12px; border-radius: 6px; background: rgba(251, 191, 36, 0.1); border: 1px dashed rgba(251, 191, 36, 0.35); font-size: 0.82rem; color: var(--text-main); margin-bottom: 14px; line-height: 1.5;">
+          <strong style="color: var(--neon-yellow);">Default Host Administrator Credentials:</strong><br>
+          Username: <code style="color: #fff; font-weight: bold; background: rgba(255,255,255,0.1); padding: 1px 4px; border-radius: 3px;">admin</code><br>
+          Password: <code style="color: #fff; font-weight: bold; background: rgba(255,255,255,0.1); padding: 1px 4px; border-radius: 3px;">ghostadmin</code><br>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">(You can also login with any account having ROLE_ADMIN, e.g. harsh045)</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Admin Username</label>
+          <input type="text" id="adminUsername" class="input-field" value="admin" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Admin Password</label>
+          <input type="password" id="adminPassword" class="input-field" value="ghostadmin" required autocomplete="current-password">
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 1rem;">
+          <a href="/" class="btn btn-ghost">Return to App</a>
+          <button type="submit" class="btn btn-primary" id="adminLoginSubmitBtn">Access Host Control</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer"></div>
 

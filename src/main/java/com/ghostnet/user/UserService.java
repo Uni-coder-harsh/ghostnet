@@ -2,6 +2,11 @@ package com.ghostnet.user;
 
 import com.ghostnet.common.ResourceNotFoundException;
 import com.ghostnet.common.ValidationException;
+import com.ghostnet.room.RoomMemberRecord;
+import com.ghostnet.room.RoomMemberRole;
+import com.ghostnet.room.RoomMembershipRepository;
+import com.ghostnet.room.RoomRecord;
+import com.ghostnet.room.RoomRepository;
 import com.ghostnet.security.AuthenticationException;
 import com.ghostnet.security.PasswordService;
 import com.ghostnet.session.AuthSessionService;
@@ -14,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -28,15 +34,21 @@ public class UserService {
     private final PasswordService passwordService;
     private final AuthSessionService authSessionService;
     private final PresenceService presenceService;
+    private final RoomRepository roomRepository;
+    private final RoomMembershipRepository roomMembershipRepository;
 
     public UserService(UserRepository userRepository,
                        PasswordService passwordService,
                        AuthSessionService authSessionService,
-                       PresenceService presenceService) {
+                       PresenceService presenceService,
+                       RoomRepository roomRepository,
+                       RoomMembershipRepository roomMembershipRepository) {
         this.userRepository = userRepository;
         this.passwordService = passwordService;
         this.authSessionService = authSessionService;
         this.presenceService = presenceService;
+        this.roomRepository = roomRepository;
+        this.roomMembershipRepository = roomMembershipRepository;
     }
 
     /**
@@ -77,6 +89,9 @@ public class UserService {
         userRepository.save(newUser);
         log.info("Registered new user '{}' with role {}", cleanUsername, assignedRole);
 
+        // Auto-enroll operative into default public room if available
+        autoEnrollInDefaultRoom(userId);
+
         SessionRecord session = authSessionService.createSession(userId, clientIp, userAgent);
         return new AuthResponse(session.token(), UserDto.from(newUser, true));
     }
@@ -94,9 +109,30 @@ public class UserService {
         }
 
         SessionRecord session = authSessionService.createSession(user.id(), clientIp, userAgent);
+        autoEnrollInDefaultRoom(user.id());
         log.info("User '{}' logged in successfully from IP {}", cleanUsername, clientIp);
         boolean isOnline = presenceService.isOnline(user.id());
         return new AuthResponse(session.token(), UserDto.from(user, isOnline));
+    }
+
+    private void autoEnrollInDefaultRoom(String userId) {
+        try {
+            Optional<RoomRecord> defaultRoom = roomRepository.findByCode("GN-MAIN");
+            if (defaultRoom.isPresent()) {
+                String roomId = defaultRoom.get().id();
+                if (!roomMembershipRepository.isMember(roomId, userId)) {
+                    roomMembershipRepository.addMember(new RoomMemberRecord(
+                            roomId,
+                            userId,
+                            RoomMemberRole.MEMBER,
+                            Instant.now()
+                    ));
+                    log.info("Auto-enrolled user '{}' into #GN-MAIN", userId);
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not auto-enroll user into default room: {}", e.getMessage());
+        }
     }
 
     /**

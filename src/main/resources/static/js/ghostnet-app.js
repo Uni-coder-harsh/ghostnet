@@ -7,15 +7,18 @@
 
   // State
   let currentUser = null;
-  let ws = null;
-  let wsReconnectTimer = null;
-  let pingTimer = null;
-  let typingTimeout = null;
-  let currentChat = null; // { type: 'dm' | 'room', id: string, name: string, code?: string }
+  let currentChat = null; // { type: 'dm' | 'room', id, name, code, isOwner }
   let currentMessages = [];
+  let ws = null;
+  let pingTimer = null;
+  let wsReconnectTimer = null;
+  let typingTimeout = null;
   let typingClearTimer = null;
+  let pollTimer = null;
+  let sidebarSyncTimer = null;
 
-  // DOM Elements
+  // DOM Elements - Header
+  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
   const hostIpBadge = document.getElementById('hostIpBadge');
   const hostIpText = document.getElementById('hostIpText');
   const diagnosticBtn = document.getElementById('diagnosticBtn');
@@ -25,6 +28,8 @@
   const headerUsername = document.getElementById('headerUsername');
   const loginOpenBtn = document.getElementById('loginOpenBtn');
 
+  // DOM Elements - Sidebar
+  const appSidebar = document.getElementById('appSidebar');
   const tabDmBtn = document.getElementById('tabDmBtn');
   const tabRoomsBtn = document.getElementById('tabRoomsBtn');
   const sidebarDmContent = document.getElementById('sidebarDmContent');
@@ -32,12 +37,12 @@
   const usersList = document.getElementById('usersList');
   const onlineCount = document.getElementById('onlineCount');
   const refreshUsersBtn = document.getElementById('refreshUsersBtn');
-
-  const openCreateRoomBtn = document.getElementById('openCreateRoomBtn');
-  const openJoinRoomBtn = document.getElementById('openJoinRoomBtn');
   const myRoomsList = document.getElementById('myRoomsList');
   const publicRoomsList = document.getElementById('publicRoomsList');
+  const openCreateRoomBtn = document.getElementById('openCreateRoomBtn');
+  const openJoinRoomBtn = document.getElementById('openJoinRoomBtn');
 
+  // DOM Elements - Workspace
   const emptyChatPlaceholder = document.getElementById('emptyChatPlaceholder');
   const activeChatContainer = document.getElementById('activeChatContainer');
   const activeChatAvatar = document.getElementById('activeChatAvatar');
@@ -52,8 +57,10 @@
   const typingText = document.getElementById('typingText');
   const chatForm = document.getElementById('chatForm');
   const chatInput = document.getElementById('chatInput');
+  const quickJoinRoomBtn = document.getElementById('quickJoinRoomBtn');
+  const quickCreateRoomBtn = document.getElementById('quickCreateRoomBtn');
 
-  // Modals
+  // DOM Elements - Modals
   const authModal = document.getElementById('authModal');
   const authForm = document.getElementById('authForm');
   const authTabLogin = document.getElementById('authTabLogin');
@@ -64,10 +71,10 @@
 
   const createRoomModal = document.getElementById('createRoomModal');
   const createRoomForm = document.getElementById('createRoomForm');
-  const roomPrivateCheckbox = document.getElementById('roomPrivateCheckbox');
-  const roomPasswordGroup = document.getElementById('roomPasswordGroup');
   const closeCreateRoomModalBtn = document.getElementById('closeCreateRoomModalBtn');
   const cancelCreateRoomBtn = document.getElementById('cancelCreateRoomBtn');
+  const roomPrivateCheckbox = document.getElementById('roomPrivateCheckbox');
+  const roomPasswordGroup = document.getElementById('roomPasswordGroup');
 
   const joinRoomModal = document.getElementById('joinRoomModal');
   const joinRoomForm = document.getElementById('joinRoomForm');
@@ -85,18 +92,29 @@
 
   const diagnosticModal = document.getElementById('diagnosticModal');
   const diagnosticContent = document.getElementById('diagnosticContent');
-  const closeDiagnosticModalBtn = document.getElementById('closeDiagnosticModalBtn');
   const rerunDiagnosticBtn = document.getElementById('rerunDiagnosticBtn');
+  const closeDiagnosticModalBtn = document.getElementById('closeDiagnosticModalBtn');
 
-  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-  const appSidebar = document.getElementById('appSidebar');
+  // Persistent Auth Fetch Wrapper (handles mobile cookie dropping and Bearer headers)
+  function authFetch(url, options = {}) {
+    options.headers = options.headers || {};
+    const token = localStorage.getItem('ghostnet_token');
+    if (token) {
+      if (typeof options.headers.set === 'function') {
+        options.headers.set('Authorization', `Bearer ${token}`);
+      } else {
+        options.headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+    return fetch(url, options);
+  }
 
-  // 1. Initialize Icons
+  // 1. Icon Injection
   function injectIcons() {
     if (typeof GhostNetIcons === 'undefined') return;
-    const map = {
-      brandIcon: GhostNetIcons.ghost,
+    const iconMap = {
       menuIcon: GhostNetIcons.menu,
+      brandIcon: GhostNetIcons.ghost,
       diagIcon: GhostNetIcons.activity,
       shieldIcon: GhostNetIcons.shield,
       usersIcon: GhostNetIcons.users,
@@ -104,7 +122,6 @@
       refreshUsersIcon: GhostNetIcons.refresh,
       plusIcon: GhostNetIcons.plus,
       hashIcon: GhostNetIcons.hash,
-      placeholderGhostIcon: GhostNetIcons.ghost,
       partIcon: GhostNetIcons.users,
       sendIcon: GhostNetIcons.send,
       closeAuthIcon: GhostNetIcons.close,
@@ -114,9 +131,11 @@
       closePartIcon: GhostNetIcons.close,
       closeDiagIcon: GhostNetIcons.close,
       rerunDiagIcon: GhostNetIcons.refresh,
-      logoutIcon: GhostNetIcons.logout
+      logoutIcon: GhostNetIcons.logout,
+      placeholderGhostIcon: GhostNetIcons.ghost
     };
-    for (const [id, svg] of Object.entries(map)) {
+
+    for (const [id, svg] of Object.entries(iconMap)) {
       const el = document.getElementById(id);
       if (el) el.innerHTML = svg;
     }
@@ -140,12 +159,14 @@
   // 2. Auth Flow
   async function checkAuth() {
     try {
-      const res = await fetch('/api/auth/me');
+      const res = await authFetch('/api/auth/me');
       if (res.ok) {
         currentUser = await res.json();
         updateUserUI();
         initWebSocket();
-        loadSidebarData();
+        await loadSidebarData();
+        startPeriodicSync();
+        autoSelectDefaultChat();
       } else {
         openAuthModal(false);
       }
@@ -194,43 +215,50 @@
       return;
     }
 
+    const token = localStorage.getItem('ghostnet_token');
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${location.host}/ws`;
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+    const wsUrl = `${protocol}//${location.host}/ws${tokenQuery}`;
 
-    ws = new WebSocket(wsUrl);
+    try {
+      ws = new WebSocket(wsUrl);
 
-    ws.onopen = () => {
-      console.log('[GhostNet] WebSocket connected');
-      updateConnectionBadge(true);
-      startPing();
-    };
+      ws.onopen = () => {
+        console.log('[GhostNet] WebSocket connected successfully');
+        updateConnectionBadge(true);
+        startPing();
+      };
 
-    ws.onmessage = (event) => {
-      try {
-        const frame = JSON.parse(event.data);
-        handleWsFrame(frame);
-      } catch (e) {
-        console.warn('Failed to parse frame:', e);
-      }
-    };
+      ws.onmessage = (event) => {
+        try {
+          const frame = JSON.parse(event.data);
+          handleWsFrame(frame);
+        } catch (e) {
+          console.warn('Failed to parse WS frame:', e);
+        }
+      };
 
-    ws.onclose = () => {
-      console.warn('[GhostNet] WebSocket disconnected. Reconnecting...');
-      updateConnectionBadge(false);
-      stopPing();
+      ws.onclose = () => {
+        console.warn('[GhostNet] WebSocket disconnected. Scheduling reconnect...');
+        updateConnectionBadge(false);
+        stopPing();
+        scheduleReconnect();
+      };
+
+      ws.onerror = (err) => {
+        console.error('[GhostNet] WebSocket error', err);
+      };
+    } catch (e) {
+      console.warn('WebSocket init exception:', e);
       scheduleReconnect();
-    };
-
-    ws.onerror = (err) => {
-      console.error('[GhostNet] WebSocket transport error', err);
-    };
+    }
   }
 
   function scheduleReconnect() {
     clearTimeout(wsReconnectTimer);
     wsReconnectTimer = setTimeout(() => {
       if (currentUser) initWebSocket();
-    }, 3000);
+    }, 2500);
   }
 
   function startPing() {
@@ -239,18 +267,21 @@
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'PING', requestId: Date.now().toString() }));
       }
-    }, 20000);
+    }, 15000);
   }
 
   function stopPing() {
-    clearInterval(pingTimer);
+    if (pingTimer) {
+      clearInterval(pingTimer);
+      pingTimer = null;
+    }
   }
 
   function updateConnectionBadge(connected) {
     const dot = hostIpBadge.querySelector('.status-dot');
     if (connected) {
       dot.className = 'status-dot online';
-      hostIpText.textContent = `${location.hostname}:${location.port || (location.protocol === 'https:' ? 443 : 8080)}`;
+      hostIpText.textContent = `${location.hostname}:${location.port || (location.protocol === 'https:' ? '443' : '80')}`;
     } else {
       dot.className = 'status-dot warning';
       hostIpText.textContent = 'Reconnecting...';
@@ -263,11 +294,10 @@
 
     switch (type) {
       case 'CONNECTED_ACK':
-        console.log('[GhostNet] Connected ACK:', payload);
+        console.log('[GhostNet] Connected ACK from host server');
         break;
 
       case 'PONG':
-        // Heartbeat response
         break;
 
       case 'DIRECT_MESSAGE_RECEIVED':
@@ -303,11 +333,10 @@
   function handleIncomingDirectMessage(msg) {
     if (currentChat && currentChat.type === 'dm' && currentChat.id === msg.senderId) {
       appendMessageToStream(msg, false);
-      // Mark as read immediately
-      fetch(`/api/messages/direct/${msg.senderId}/read`, { method: 'POST' }).catch(() => {});
+      authFetch(`/api/messages/direct/${msg.senderId}/read`, { method: 'POST' }).catch(() => {});
     } else {
-      showToast(`New message from ${msg.senderDisplayName}`, 'info');
-      highlightUserCard(msg.senderId);
+      showToast(`Private message from ${msg.senderDisplayName}`, 'info');
+      highlightCard(msg.senderId);
     }
   }
 
@@ -321,6 +350,9 @@
     if (currentChat && currentChat.type === 'room' && currentChat.id === msg.roomId) {
       const isOutgoing = currentUser && msg.senderId === currentUser.id;
       appendMessageToStream(msg, isOutgoing);
+    } else {
+      showToast(`New message in #${msg.roomName || 'Room'} from ${msg.senderDisplayName}`, 'info');
+      highlightCard(msg.roomId);
     }
   }
 
@@ -328,13 +360,15 @@
     const userCard = document.querySelector(`.user-card[data-user-id="${userId}"]`);
     if (userCard) {
       const dot = userCard.querySelector('.online-indicator');
-      if (dot) {
-        dot.className = `online-indicator ${online ? '' : 'offline'}`;
-      }
+      if (dot) dot.className = `online-indicator ${online ? '' : 'offline'}`;
       const sub = userCard.querySelector('.item-sub');
       if (sub) {
-        sub.textContent = online ? 'Online now' : 'Offline';
+        sub.textContent = online ? 'Online now • Click for 1-on-1 DM' : 'Offline • Click for 1-on-1 DM';
+        sub.style.color = online ? 'var(--neon-green)' : 'var(--text-dim)';
       }
+    } else {
+      // User wasn't in sidebar DOM, re-fetch users list
+      loadUsers();
     }
     updateOnlineUserCount();
   }
@@ -347,7 +381,7 @@
       clearTimeout(typingClearTimer);
       typingClearTimer = setTimeout(() => { typingBanner.style.display = 'none'; }, 3000);
     } else if (currentChat.type === 'room' && currentChat.id === roomId && typing) {
-      typingText.textContent = 'Someone is typing in this room...';
+      typingText.textContent = 'An operative is transmitting in this room...';
       typingBanner.style.display = 'flex';
       clearTimeout(typingClearTimer);
       typingClearTimer = setTimeout(() => { typingBanner.style.display = 'none'; }, 3000);
@@ -362,41 +396,70 @@
     }
   }
 
-  // 5. Sidebar Loading
-  async function loadSidebarData() {
-    loadUsers();
-    loadRooms();
+  // 5. Sidebar Loading & Periodic Sync
+  async function loadSidebarData(silent = false) {
+    await Promise.all([
+      loadUsers(silent),
+      loadRooms(silent)
+    ]);
   }
 
-  async function loadUsers() {
+  function startPeriodicSync() {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(() => {
+      pollActiveMessages();
+    }, 3000);
+
+    clearInterval(sidebarSyncTimer);
+    sidebarSyncTimer = setInterval(() => {
+      if (currentUser) {
+        loadSidebarData(true);
+      }
+    }, 6000);
+
+    // Wakeup sync when mobile tab regains visibility
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && currentUser) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          initWebSocket();
+        }
+        pollActiveMessages();
+        loadSidebarData(true);
+      }
+    });
+  }
+
+  async function loadUsers(silent = false) {
     try {
-      const res = await fetch('/api/users/all');
+      const res = await authFetch('/api/users/all');
       if (!res.ok) return;
       const users = await res.json();
       renderUsers(users);
     } catch (e) {
-      console.warn('Failed to load users:', e);
+      if (!silent) console.warn('Failed to load operatives:', e);
     }
   }
 
   function renderUsers(users) {
-    usersList.innerHTML = '';
     const otherUsers = users.filter(u => !currentUser || u.id !== currentUser.id);
 
     if (otherUsers.length === 0) {
       usersList.innerHTML = `<div style="text-align: center; padding: 2rem 1rem; color: var(--text-dim); font-size: 0.8rem;">
-        No other operatives registered yet. Connect another device to your hotspot to communicate.
+        No other operatives connected yet.<br>When other devices connect to your hotspot, they appear here for 1-on-1 DMs.
       </div>`;
       onlineCount.textContent = '0';
       return;
     }
 
+    usersList.innerHTML = '';
     let onlineTotal = 0;
     otherUsers.forEach(u => {
       if (u.online) onlineTotal++;
       const card = document.createElement('div');
       card.className = `item-card user-card ${currentChat && currentChat.id === u.id ? 'active' : ''}`;
       card.setAttribute('data-user-id', u.id);
+      card.setAttribute('data-chat-id', u.id);
+      card.style.cursor = 'pointer';
       const initial = (u.displayName || u.username).charAt(0).toUpperCase();
 
       card.innerHTML = `
@@ -406,8 +469,8 @@
             <span class="online-indicator ${u.online ? '' : 'offline'}"></span>
           </div>
           <div class="item-details">
-            <div class="item-name">${escapeHtml(u.displayName || u.username)}</div>
-            <div class="item-sub">${u.online ? 'Online now' : 'Offline'}</div>
+            <div class="item-name">${escapeHtml(u.displayName || u.username)} <span style="font-size: 0.72rem; color: var(--text-dim); font-weight: normal;">(@${escapeHtml(u.username)})</span></div>
+            <div class="item-sub" style="color: ${u.online ? 'var(--neon-green)' : 'var(--text-dim)'};">${u.online ? 'Online now • Click for 1-on-1 DM' : 'Offline • Click for 1-on-1 DM'}</div>
           </div>
         </div>
       `;
@@ -430,11 +493,11 @@
     onlineCount.textContent = dots.length.toString();
   }
 
-  async function loadRooms() {
+  async function loadRooms(silent = false) {
     try {
       const [myRes, pubRes] = await Promise.all([
-        fetch('/api/rooms/my'),
-        fetch('/api/rooms/public')
+        authFetch('/api/rooms/my'),
+        authFetch('/api/rooms/public')
       ]);
 
       if (myRes.ok) {
@@ -446,7 +509,7 @@
         renderPublicRooms(pubRooms);
       }
     } catch (e) {
-      console.warn('Failed to load rooms:', e);
+      if (!silent) console.warn('Failed to load rooms:', e);
     }
   }
 
@@ -460,20 +523,29 @@
     rooms.forEach(r => {
       const card = document.createElement('div');
       card.className = `item-card ${currentChat && currentChat.id === r.id ? 'active' : ''}`;
+      card.setAttribute('data-chat-id', r.id);
+      card.style.cursor = 'pointer';
+      const isMain = r.code === 'GN-MAIN';
+
       card.innerHTML = `
         <div class="item-info">
-          <div class="avatar" style="color: var(--neon-blue);">#</div>
+          <div class="avatar" style="color: ${isMain ? 'var(--neon-green)' : 'var(--neon-blue)'}; border-color: ${isMain ? 'rgba(16, 185, 129, 0.4)' : 'rgba(0, 240, 255, 0.4)'};">#</div>
           <div class="item-details">
-            <div class="item-name">${escapeHtml(r.name)}</div>
-            <div class="item-sub">${r.memberCount} members</div>
+            <div class="item-name" style="display: flex; align-items: center; gap: 6px;">
+              ${escapeHtml(r.name)}
+              ${isMain ? '<span class="brand-badge" style="font-size: 0.65rem; color: var(--neon-green); border-color: var(--neon-green);">DEFAULT</span>' : ''}
+            </div>
+            <div class="item-sub">${r.memberCount} members • Code: ${r.code}</div>
           </div>
         </div>
         <span class="code-pill">${r.code}</span>
       `;
+
       card.addEventListener('click', () => {
         selectConversation('room', r.id, r.name, false, r.code, r.isOwner);
         if (window.innerWidth <= 768) appSidebar.classList.remove('open');
       });
+
       myRoomsList.appendChild(card);
     });
   }
@@ -487,31 +559,29 @@
 
     rooms.forEach(r => {
       const card = document.createElement('div');
-      card.className = 'item-card';
+      card.className = `item-card ${currentChat && currentChat.id === r.id ? 'active' : ''}`;
+      card.setAttribute('data-chat-id', r.id);
+      card.style.cursor = 'pointer';
+
       card.innerHTML = `
         <div class="item-info">
           <div class="avatar" style="color: var(--neon-cyan);">#</div>
           <div class="item-details">
             <div class="item-name">${escapeHtml(r.name)}</div>
-            <div class="item-sub">${r.memberCount} / ${r.capacity} capacity</div>
+            <div class="item-sub">${r.memberCount} / ${r.capacity} capacity • Code: ${r.code}</div>
           </div>
         </div>
         ${r.isMember
-          ? `<span class="brand-badge">JOINED</span>`
-          : `<button class="btn btn-primary btn-sm join-public-btn" data-code="${r.code}">Join</button>`
+          ? `<span class="brand-badge" style="color: var(--neon-green); border-color: var(--neon-green);">JOINED</span>`
+          : `<button class="btn btn-primary btn-sm join-public-btn" data-code="${r.code}">Join & Open</button>`
         }
       `;
 
-      const joinBtn = card.querySelector('.join-public-btn');
-      if (joinBtn) {
-        joinBtn.addEventListener('click', async (e) => {
-          e.stopPropagation();
+      // Clicking anywhere on public room card joins and enters
+      card.addEventListener('click', async () => {
+        if (!r.isMember) {
           await joinRoom(r.code);
-        });
-      }
-
-      card.addEventListener('click', () => {
-        if (r.isMember) {
+        } else {
           selectConversation('room', r.id, r.name, false, r.code, r.isOwner);
           if (window.innerWidth <= 768) appSidebar.classList.remove('open');
         }
@@ -521,47 +591,93 @@
     });
   }
 
-  // 6. Conversation Switching
+  // 6. Conversation Switching & Rendering
   async function selectConversation(type, id, name, isOnline = false, code = null, isOwner = false) {
     currentChat = { type, id, name, code, isOwner };
 
-    // Update Sidebar active state
+    // Update active highlight in sidebar
     document.querySelectorAll('.item-card').forEach(el => el.classList.remove('active'));
+    const activeEl = document.querySelector(`.item-card[data-chat-id="${id}"]`);
+    if (activeEl) activeEl.classList.add('active');
 
     emptyChatPlaceholder.style.display = 'none';
     activeChatContainer.style.display = 'flex';
 
-    activeChatTitle.textContent = name;
-    activeChatAvatar.textContent = name.charAt(0).toUpperCase();
+    if (type === 'room') {
+      activeChatAvatar.textContent = '#';
+      activeChatAvatar.style.color = 'var(--neon-green)';
+      activeChatAvatar.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+      activeChatAvatar.style.background = 'rgba(16, 185, 129, 0.1)';
 
-    if (type === 'dm') {
+      activeChatTitle.innerHTML = `${escapeHtml(name)} <span class="brand-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--neon-green); border-color: rgba(16, 185, 129, 0.3); font-size: 0.7rem; margin-left: 6px;">ROOM ENCLAVE</span>`;
+
+      activeChatCode.style.display = 'inline-block';
+      activeChatCode.textContent = code || '';
+      viewParticipantsBtn.style.display = 'inline-flex';
+      leaveRoomBtn.style.display = (code === 'GN-MAIN') ? 'none' : 'inline-flex';
+      activeChatSubtitle.innerHTML = `<span style="color: var(--neon-green);">● PUBLIC BROADCAST:</span> All operatives in this room receive transmissions (Code: <strong>${code}</strong>)`;
+      chatInput.placeholder = `Broadcast to #${name} (Visible to all members)...`;
+
+      loadRoomMessages(id);
+      updateRoomParticipantsBadge(id);
+    } else {
+      activeChatAvatar.textContent = name.charAt(0).toUpperCase();
+      activeChatAvatar.style.color = 'var(--neon-cyan)';
+      activeChatAvatar.style.borderColor = 'rgba(0, 240, 255, 0.4)';
+      activeChatAvatar.style.background = 'rgba(0, 240, 255, 0.1)';
+
+      activeChatTitle.innerHTML = `${escapeHtml(name)} <span class="brand-badge" style="background: rgba(0, 240, 255, 0.15); color: var(--neon-cyan); border-color: rgba(0, 240, 255, 0.3); font-size: 0.7rem; margin-left: 6px;">PRIVATE 1-ON-1 DM</span>`;
+
       activeChatCode.style.display = 'none';
       viewParticipantsBtn.style.display = 'none';
       leaveRoomBtn.style.display = 'none';
-      activeChatSubtitle.textContent = isOnline ? 'Online now' : 'Offline (Messages stored persistently)';
+      const statusColor = isOnline ? 'var(--neon-green)' : 'var(--text-dim)';
+      const statusText = isOnline ? 'Operative is Online' : 'Operative is Offline';
+      activeChatSubtitle.innerHTML = `<span style="color: ${statusColor};">● ${statusText}</span> — Private direct message (Only you & @${escapeHtml(name)} can see this)`;
+      chatInput.placeholder = `Send private 1-on-1 message to @${name}...`;
+
       loadDirectMessages(id);
-    } else {
-      activeChatCode.style.display = 'inline-block';
-      activeChatCode.textContent = code;
-      viewParticipantsBtn.style.display = 'inline-flex';
-      leaveRoomBtn.style.display = 'inline-flex';
-      activeChatSubtitle.textContent = `Room Code: ${code} • Offline mesh broadcast`;
-      loadRoomMessages(id);
-      updateRoomParticipantsBadge(id);
     }
 
     chatInput.focus();
   }
 
-  async function loadDirectMessages(otherUserId) {
-    messageStream.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 1rem;">Loading history...</div>';
+  async function autoSelectDefaultChat() {
+    if (currentChat) return;
     try {
-      const res = await fetch(`/api/messages/direct/${otherUserId}?limit=50&offset=0`);
+      const res = await authFetch('/api/rooms/my');
+      if (res.ok) {
+        const rooms = await res.json();
+        const mainRoom = rooms.find(r => r.code === 'GN-MAIN' || r.name.toLowerCase().includes('general'));
+        if (mainRoom) {
+          selectConversation('room', mainRoom.id, mainRoom.name, false, mainRoom.code, mainRoom.isOwner);
+          return;
+        }
+      }
+      // If not yet in my rooms, join GN-MAIN automatically
+      const joinRes = await authFetch('/api/rooms/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'GN-MAIN' })
+      });
+      if (joinRes.ok) {
+        const room = await joinRes.json();
+        selectConversation('room', room.id, room.name, false, room.code, room.isOwner);
+        loadRooms(true);
+      }
+    } catch (e) {
+      console.warn('Auto-select default chat failed:', e);
+    }
+  }
+
+  async function loadDirectMessages(otherUserId) {
+    messageStream.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 1rem;">Loading transmission logs...</div>';
+    try {
+      const res = await authFetch(`/api/messages/direct/${otherUserId}?limit=50&offset=0`);
       if (res.ok) {
         currentMessages = await res.json();
         renderMessageStream(currentMessages, 'dm');
-        // Mark conversation read
-        fetch(`/api/messages/direct/${otherUserId}/read`, { method: 'POST' }).catch(() => {});
+        authFetch(`/api/messages/direct/${otherUserId}/read`, { method: 'POST' }).catch(() => {});
       }
     } catch (e) {
       console.warn('Failed to load DMs:', e);
@@ -569,9 +685,9 @@
   }
 
   async function loadRoomMessages(roomId) {
-    messageStream.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 1rem;">Loading room history...</div>';
+    messageStream.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 1rem;">Loading enclave transmissions...</div>';
     try {
-      const res = await fetch(`/api/messages/room/${roomId}?limit=50&offset=0`);
+      const res = await authFetch(`/api/messages/room/${roomId}?limit=50&offset=0`);
       if (res.ok) {
         currentMessages = await res.json();
         renderMessageStream(currentMessages, 'room');
@@ -581,9 +697,46 @@
     }
   }
 
+  // Background message polling fallback for mobile sleep/background states
+  async function pollActiveMessages() {
+    if (!currentChat || !currentUser) return;
+    try {
+      if (currentChat.type === 'room') {
+        const res = await authFetch(`/api/messages/room/${currentChat.id}?limit=50&offset=0`);
+        if (res.ok) {
+          const msgs = await res.json();
+          mergeMessages(msgs);
+        }
+      } else if (currentChat.type === 'dm') {
+        const res = await authFetch(`/api/messages/direct/${currentChat.id}?limit=50&offset=0`);
+        if (res.ok) {
+          const msgs = await res.json();
+          mergeMessages(msgs);
+        }
+      }
+    } catch (e) {
+      // Silently ignore background poll errors
+    }
+  }
+
+  function mergeMessages(messages) {
+    if (!messages || messages.length === 0) return;
+    let anyAdded = false;
+    messages.forEach(msg => {
+      if (!document.querySelector(`.message-row[data-msg-id="${msg.id}"]`)) {
+        const isOutgoing = currentUser && msg.senderId === currentUser.id;
+        appendMessageToStream(msg, isOutgoing, false);
+        anyAdded = true;
+      }
+    });
+    if (anyAdded) {
+      scrollToBottom();
+    }
+  }
+
   async function updateRoomParticipantsBadge(roomId) {
     try {
-      const res = await fetch(`/api/rooms/${roomId}/participants`);
+      const res = await authFetch(`/api/rooms/${roomId}/participants`);
       if (res.ok) {
         const parts = await res.json();
         participantCountBadge.textContent = parts.length.toString();
@@ -594,8 +747,8 @@
   function renderMessageStream(messages, type) {
     messageStream.innerHTML = '';
     if (messages.length === 0) {
-      messageStream.innerHTML = `<div style="text-align: center; color: var(--text-dim); margin: auto; font-size: 0.85rem;">
-        No messages yet in this conversation. Send the first encrypted transmission.
+      messageStream.innerHTML = `<div style="text-align: center; color: var(--text-dim); margin: auto; font-size: 0.85rem; line-height: 1.6;">
+        No transmissions yet in this ${type === 'room' ? 'room' : 'direct conversation'}.<br>Type below to send the first message.
       </div>`;
       return;
     }
@@ -609,8 +762,14 @@
   }
 
   function appendMessageToStream(msg, isOutgoing, autoScroll = true) {
+    // Prevent duplicate rendering
+    if (msg.id && document.querySelector(`.message-row[data-msg-id="${msg.id}"]`)) {
+      return;
+    }
+
     const row = document.createElement('div');
     row.className = `message-row ${isOutgoing ? 'outgoing' : 'incoming'}`;
+    if (msg.id) row.setAttribute('data-msg-id', msg.id);
 
     const timeStr = formatTime(msg.createdAt);
     const senderLabel = isOutgoing ? 'You' : (msg.senderDisplayName || 'Operative');
@@ -667,15 +826,18 @@
         payload
       }));
     } else {
-      // Fallback to REST
-      fetch('/api/messages/direct', {
+      // Direct REST fallback
+      authFetch('/api/messages/direct', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      }).then(r => r.json()).then(dto => {
+      })
+      .then(r => r.json())
+      .then(dto => {
         appendMessageToStream(dto, true);
-      }).catch(err => {
-        showToast('Failed to transmit message', 'error');
+      })
+      .catch(err => {
+        showToast('Failed to deliver direct message', 'error');
       });
     }
   }
@@ -693,20 +855,23 @@
         payload
       }));
     } else {
-      // Fallback to REST
-      fetch('/api/messages/room', {
+      // Room REST fallback
+      authFetch(`/api/messages/room/${roomId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      }).then(r => r.json()).then(dto => {
+      })
+      .then(r => r.json())
+      .then(dto => {
         appendMessageToStream(dto, true);
-      }).catch(err => {
+      })
+      .catch(err => {
         showToast('Failed to post room message', 'error');
       });
     }
   }
 
-  // Typing Notification
+  // Live Typing Notification
   chatInput.addEventListener('input', () => {
     if (!currentChat || !ws || ws.readyState !== WebSocket.OPEN) return;
     clearTimeout(typingTimeout);
@@ -717,12 +882,14 @@
         : { recipientId: currentChat.id, typing: true }
     }));
     typingTimeout = setTimeout(() => {
-      ws.send(JSON.stringify({
-        type: 'TYPING_INDICATOR',
-        payload: currentChat.type === 'room'
-          ? { roomId: currentChat.id, typing: false }
-          : { recipientId: currentChat.id, typing: false }
-      }));
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'TYPING_INDICATOR',
+          payload: currentChat.type === 'room'
+            ? { roomId: currentChat.id, typing: false }
+            : { recipientId: currentChat.id, typing: false }
+        }));
+      }
     }, 2500);
   });
 
@@ -736,7 +903,7 @@
     const password = document.getElementById('roomPasswordInput').value;
 
     try {
-      const res = await fetch('/api/rooms', {
+      const res = await authFetch('/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, description, capacity, isPrivate, password })
@@ -747,7 +914,7 @@
         showToast(`Room created! Joining code: ${room.code}`, 'success');
         createRoomModal.classList.remove('active');
         createRoomForm.reset();
-        loadRooms();
+        await loadRooms();
         selectConversation('room', room.id, room.name, false, room.code, true);
       } else {
         const err = await res.json();
@@ -767,7 +934,7 @@
 
   async function joinRoom(code, password = null) {
     try {
-      const res = await fetch('/api/rooms/join', {
+      const res = await authFetch('/api/rooms/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, password })
@@ -778,7 +945,7 @@
         showToast(`Joined room: ${room.name}`, 'success');
         joinRoomModal.classList.remove('active');
         joinRoomForm.reset();
-        loadRooms();
+        await loadRooms();
         selectConversation('room', room.id, room.name, false, room.code, room.isOwner);
       } else {
         const err = await res.json();
@@ -794,7 +961,7 @@
     if (!confirm(`Are you sure you want to leave ${currentChat.name}?`)) return;
 
     try {
-      const res = await fetch(`/api/rooms/${currentChat.id}/leave`, { method: 'POST' });
+      const res = await authFetch(`/api/rooms/${currentChat.id}/leave`, { method: 'POST' });
       if (res.ok) {
         showToast(`Left ${currentChat.name}`, 'info');
         currentChat = null;
@@ -811,7 +978,7 @@
   viewParticipantsBtn.addEventListener('click', async () => {
     if (!currentChat || currentChat.type !== 'room') return;
     try {
-      const res = await fetch(`/api/rooms/${currentChat.id}/participants`);
+      const res = await authFetch(`/api/rooms/${currentChat.id}/participants`);
       if (res.ok) {
         const parts = await res.json();
         renderParticipants(parts);
@@ -855,7 +1022,7 @@
 
   async function kickParticipant(roomId, userId) {
     try {
-      const res = await fetch(`/api/rooms/${roomId}/participants/${userId}`, { method: 'DELETE' });
+      const res = await authFetch(`/api/rooms/${roomId}/participants/${userId}`, { method: 'DELETE' });
       if (res.ok) {
         showToast('Participant removed', 'success');
         participantsModal.classList.remove('active');
@@ -890,18 +1057,23 @@
       if (res.ok) {
         const data = await res.json();
         currentUser = data.user;
+        if (data.token) {
+          localStorage.setItem('ghostnet_token', data.token);
+        }
         authModal.classList.remove('active');
         authForm.reset();
         showToast(`Authenticated as ${currentUser.displayName}`, 'success');
         updateUserUI();
         initWebSocket();
-        loadSidebarData();
+        await loadSidebarData();
+        startPeriodicSync();
+        autoSelectDefaultChat();
       } else {
         const err = await res.json();
         showToast(err.message || 'Authentication failed', 'error');
       }
     } catch (err) {
-      showToast('Connection failed', 'error');
+      showToast('Connection failed to host server', 'error');
     }
   });
 
@@ -921,7 +1093,7 @@
     const bio = document.getElementById('profileBio').value.trim();
 
     try {
-      const res = await fetch('/api/users/profile', {
+      const res = await authFetch('/api/users/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ displayName, bio })
@@ -940,8 +1112,9 @@
 
   logoutBtn.addEventListener('click', async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await authFetch('/api/auth/logout', { method: 'POST' });
     } catch (e) {}
+    localStorage.removeItem('ghostnet_token');
     currentUser = null;
     if (ws) ws.close();
     location.reload();
@@ -955,7 +1128,7 @@
     diagnosticModal.classList.add('active');
     diagnosticContent.innerHTML = 'Running connectivity probes on local interface...';
     try {
-      const res = await fetch('/api/admin/diagnostics');
+      const res = await authFetch('/api/admin/diagnostics');
       if (res.ok) {
         const diag = await res.json();
         diagnosticContent.innerHTML = `
@@ -975,12 +1148,13 @@
     }
   }
 
-  // Tab switching
+  // Sidebar Tab Switching
   tabDmBtn.addEventListener('click', () => {
     tabDmBtn.classList.add('active');
     tabRoomsBtn.classList.remove('active');
     sidebarDmContent.style.display = 'block';
     sidebarRoomsContent.style.display = 'none';
+    loadUsers();
   });
 
   tabRoomsBtn.addEventListener('click', () => {
@@ -991,7 +1165,7 @@
     loadRooms();
   });
 
-  refreshUsersBtn.addEventListener('click', loadUsers);
+  refreshUsersBtn.addEventListener('click', () => loadUsers());
   authTabLogin.addEventListener('click', () => openAuthModal(false));
   authTabRegister.addEventListener('click', () => openAuthModal(true));
   loginOpenBtn.addEventListener('click', () => openAuthModal(false));
@@ -1033,11 +1207,15 @@
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  function highlightUserCard(userId) {
-    const card = document.querySelector(`.user-card[data-user-id="${userId}"]`);
+  function highlightCard(chatId) {
+    const card = document.querySelector(`.item-card[data-chat-id="${chatId}"]`);
     if (card) {
       card.style.borderColor = 'var(--neon-cyan)';
-      setTimeout(() => { card.style.borderColor = ''; }, 3000);
+      card.style.background = 'rgba(0, 240, 255, 0.08)';
+      setTimeout(() => {
+        card.style.borderColor = '';
+        card.style.background = '';
+      }, 3000);
     }
   }
 

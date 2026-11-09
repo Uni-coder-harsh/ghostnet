@@ -1,0 +1,38 @@
+server:
+  port: 8080
+
+spring:
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:sqlite:data/ghostnet_test.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      pool-name: GhostNetTestHikariPool
+      maximum-pool-size: 5
+      connection-test-query: SELECT 1
+
+ghostnet:
+  name: "GhostNet-Test"
+  version: "1.0.0"
+  database:
+    path: data/ghostnet_test.db
+    wal-mode: true
+    busy-timeout-ms: 5000
+  security:
+    cookie-name: "GHOSTNET_SESSION"
+    session-duration-hours: 72
+    rate-limit-per-minute: 500
+    max-message-length: 4096
+  retention:
+    enabled: true
+    message-retention-days: 30
+  network:
+    heartbeat-interval-seconds: 15
+    client-timeout-seconds: 45
+
+logging:
+  level:
+    root: WARN
+    com.ghostnet: INFO
