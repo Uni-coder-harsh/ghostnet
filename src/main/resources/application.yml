@@ -1,0 +1,53 @@
+server:
+  port: ${PORT:8080}
+  address: 0.0.0.0
+  shutdown: graceful
+
+spring:
+  application:
+    name: ghostnet
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:sqlite:${GHOSTNET_DB_PATH:data/ghostnet.db}
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      pool-name: GhostNetHikariPool
+      maximum-pool-size: 8
+      minimum-idle: 2
+      connection-timeout: 10000
+      idle-timeout: 300000
+      max-lifetime: 900000
+      connection-test-query: SELECT 1
+
+ghostnet:
+  name: "GhostNet"
+  version: "1.0.0"
+  database:
+    path: ${GHOSTNET_DB_PATH:data/ghostnet.db}
+    wal-mode: true
+    busy-timeout-ms: 5000
+  security:
+    cookie-name: "GHOSTNET_SESSION"
+    session-duration-hours: 72
+    rate-limit-per-minute: 120
+    max-message-length: 4096
+  retention:
+    enabled: true
+    message-retention-days: 30
+    auto-cleanup-interval-hours: 24
+  network:
+    preferred-interface: ${GHOSTNET_INTERFACE:}
+    heartbeat-interval-seconds: 15
+    client-timeout-seconds: 45
+
+# Structured logging: Keep message payloads out of routine logs (Req 149, 197)
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  level:
+    root: INFO
+    com.ghostnet: INFO
+    org.springframework.web: INFO
+    org.springframework.web.socket: INFO
