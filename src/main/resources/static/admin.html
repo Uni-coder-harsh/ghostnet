@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GhostNet — Host Administration Dashboard</title>
+  <link rel="stylesheet" href="/css/ghostnet.css">
+</head>
+<body style="overflow-y: auto;">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <a href="/" class="brand">
+        <span class="brand-logo"><span id="adminBrandIcon"></span> GHOSTNET</span>
+        <span class="brand-badge" style="background: rgba(251, 191, 36, 0.15); color: var(--neon-yellow); border-color: rgba(251, 191, 36, 0.3);">HOST CONTROL</span>
+      </a>
+    </div>
+
+    <div class="header-status-strip">
+      <div class="status-badge">
+        <span class="status-dot online"></span>
+        <span id="adminHostIp">Detecting...</span>
+      </div>
+      <div class="status-badge">
+        <span>Uptime:</span>
+        <span id="adminUptime" style="color: var(--neon-cyan);">--</span>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <a href="/" class="btn btn-ghost btn-sm">Return to Network</a>
+      <button id="adminShutdownBtn" class="btn btn-danger btn-sm" title="Gracefully shutdown server">
+        <span id="powerIcon"></span> Shutdown GhostNet
+      </button>
+    </div>
+  </header>
+
+  <!-- Dashboard Container -->
+  <main style="max-width: 1200px; margin: 1.5rem auto; padding: 0 1.25rem;">
+
+    <!-- System Telemetry Metrics Cards (Req 247-255) -->
+    <h2 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+      <span id="telemetryIcon"></span> Host Telemetry & Resource Utilization
+    </h2>
+
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <span class="metric-label">Server Status</span>
+        <span class="metric-value" style="color: var(--neon-green);" id="mServerStatus">ONLINE</span>
+        <span class="metric-sub" id="mVersion">Version 1.0.0</span>
+      </div>
+
+      <div class="metric-card">
+        <span class="metric-label">Connected Users</span>
+        <span class="metric-value" id="mOnlineUsers">0</span>
+        <span class="metric-sub"><span id="mRegisteredUsers">0</span> total registered</span>
+      </div>
+
+      <div class="metric-card">
+        <span class="metric-label">Active WebSockets</span>
+        <span class="metric-value" id="mActiveWs">0</span>
+        <span class="metric-sub">Real-time socket sessions</span>
+      </div>
+
+      <div class="metric-card">
+        <span class="metric-label">Active Rooms</span>
+        <span class="metric-value" id="mActiveRooms">0</span>
+        <span class="metric-sub">Communication rooms</span>
+      </div>
+
+      <div class="metric-card">
+        <span class="metric-label">Messages Processed</span>
+        <span class="metric-value" id="mTotalMessages">0</span>
+        <span class="metric-sub"><span id="mDmCount">0</span> DMs / <span id="mRoomMsgCount">0</span> Room msgs</span>
+      </div>
+
+      <div class="metric-card">
+        <span class="metric-label">JVM Memory Usage</span>
+        <span class="metric-value" id="mMemoryPercent">0%</span>
+        <span class="metric-sub"><span id="mMemoryUsed">0</span>MB / <span id="mMemoryMax">0</span>MB allocated</span>
+      </div>
+    </div>
+
+    <!-- System Maintenance & Backup Actions (Req 191-194, 259) -->
+    <div style="background: var(--bg-base); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 2rem;">
+      <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-main);">
+        System Maintenance & Persistence Operations
+      </h3>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Execute point-in-time SQLite database snapshots or purge historical message archives according to retention policy.
+      </p>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button id="triggerBackupBtn" class="btn btn-primary btn-sm">
+          <span id="backupIcon"></span> Create Database Snapshot
+        </button>
+        <button id="triggerRetentionBtn" class="btn btn-ghost btn-sm">
+          <span id="retentionIcon"></span> Run Message Retention Purge
+        </button>
+        <button id="refreshAdminBtn" class="btn btn-ghost btn-sm">
+          <span id="refreshIcon"></span> Refresh Telemetry
+        </button>
+      </div>
+      <div id="maintenanceFeedback" style="margin-top: 10px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--neon-cyan); display: none;"></div>
+    </div>
+
+    <!-- Active User Sessions Management (Req 257) -->
+    <div style="background: var(--bg-base); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 2rem;">
+      <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-main); display: flex; align-items: center; justify-content: space-between;">
+        <span>Active Authentication Sessions (<span id="sessionCount">0</span>)</span>
+        <span class="brand-badge" style="color: var(--neon-cyan);">MANAGED SESSIONS</span>
+      </h3>
+      <div style="overflow-x: auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Operative</th>
+              <th>Client IP</th>
+              <th>User Agent</th>
+              <th>Created</th>
+              <th>Expires</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="sessionsTableBody">
+            <tr><td colspan="6" style="text-align: center; color: var(--text-dim);">Loading active sessions...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Local Network Interfaces Inspection (Req 038, 056) -->
+    <div style="background: var(--bg-base); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 2rem;">
+      <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-main);">
+        Host Network Interfaces & Hotspot IP Bindings
+      </h3>
+      <div id="networkInterfacesContainer" style="display: flex; flex-direction: column; gap: 8px;">
+        <span style="color: var(--text-dim); font-size: 0.8rem;">Enumerating interfaces...</span>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Scripts -->
+  <script src="/js/ghostnet-icons.js"></script>
+  <script src="/js/ghostnet-admin.js"></script>
+</body>
+</html>
