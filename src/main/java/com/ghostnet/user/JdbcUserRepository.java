@@ -53,10 +53,11 @@ public class JdbcUserRepository implements UserRepository {
     @Override
     public void update(UserRecord user) {
         String sql = """
-            UPDATE users SET display_name = ?, role = ?, bio = ?, updated_at = ?
+            UPDATE users SET password_hash = ?, display_name = ?, role = ?, bio = ?, updated_at = ?
             WHERE id = ?
             """;
         jdbcTemplate.update(sql,
+                user.passwordHash(),
                 user.displayName(),
                 user.role().name(),
                 user.bio(),
