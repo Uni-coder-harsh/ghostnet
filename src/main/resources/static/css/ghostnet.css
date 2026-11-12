@@ -707,29 +707,133 @@ body {
 }
 
 /* Responsive adjustments */
+.mobile-back-btn {
+  display: none;
+}
+
+.console-backdrop {
+  display: none;
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(2px);
+  z-index: 99;
+}
+
 @media (max-width: 768px) {
-  .sidebar {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 40;
-    transform: translateX(-100%);
-  }
-
-  .sidebar.open {
-    transform: translateX(0);
-    box-shadow: 10px 0 30px rgba(0,0,0,0.8);
-  }
-
   .mobile-menu-btn {
     display: inline-flex;
+  }
+
+  .mobile-back-btn {
+    display: inline-flex;
+    padding: 4px 8px;
+    font-size: 1.1rem;
+    line-height: 1;
+    margin-right: 4px;
+  }
+
+  .hide-mobile {
+    display: none !important;
+  }
+
+  /* Slide-out Navigation Drawer */
+  .console-nav {
+    position: fixed;
+    top: var(--header-height);
+    bottom: 0;
+    left: 0;
+    width: 260px;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 10px 0 30px rgba(0,0,0,0.8);
+    border-right: 1px solid var(--border-color);
+  }
+
+  .console-nav.open {
+    transform: translateX(0);
+  }
+
+  .console-backdrop.open {
+    display: block;
+  }
+
+  /* Chat Workspace Responsive Switcher */
+  #viewChat > div {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .sidebar {
+    width: 100% !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    border-right: none !important;
+  }
+
+  .chat-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    display: none !important;
+  }
+
+  #viewChat.chat-active .sidebar {
+    display: none !important;
+  }
+
+  #viewChat.chat-active .chat-area {
+    display: flex !important;
+  }
+
+  .chat-input-bar {
+    padding: 0.5rem 0.75rem;
+    gap: 6px;
+  }
+
+  .chat-header {
+    padding: 0 0.75rem;
+  }
+
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .view-panel {
+    padding: 12px;
+  }
+
+  .modal-card {
+    width: 95vw;
+    max-height: 90vh;
+    padding: 16px;
   }
 }
 
 @media (min-width: 769px) {
   .mobile-menu-btn {
     display: none;
+  }
+
+  .mobile-back-btn {
+    display: none;
+  }
+
+  .console-backdrop {
+    display: none !important;
   }
 }
 

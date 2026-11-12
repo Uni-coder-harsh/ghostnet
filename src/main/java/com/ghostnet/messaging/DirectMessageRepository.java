@@ -14,6 +14,7 @@ public interface DirectMessageRepository {
     void updateStatus(String messageId, MessageStatus status);
     void markConversationDelivered(String recipientId, String senderId);
     void markConversationRead(String recipientId, String senderId);
+    List<String> findDistinctConversationPartners(String userId);
     long countTotal();
     int deleteOlderThan(Instant cutoff);
     void deleteConversation(String user1, String user2);

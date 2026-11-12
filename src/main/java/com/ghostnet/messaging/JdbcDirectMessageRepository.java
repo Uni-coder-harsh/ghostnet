@@ -96,6 +96,16 @@ public class JdbcDirectMessageRepository implements DirectMessageRepository {
     }
 
     @Override
+    public List<String> findDistinctConversationPartners(String userId) {
+        String sql = """
+            SELECT DISTINCT CASE WHEN sender_id = ? THEN recipient_id ELSE sender_id END AS partner_id
+            FROM direct_messages
+            WHERE sender_id = ? OR recipient_id = ?
+            """;
+        return jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("partner_id"), userId, userId, userId);
+    }
+
+    @Override
     public long countTotal() {
         Long count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM direct_messages", Long.class);
         return count != null ? count : 0;

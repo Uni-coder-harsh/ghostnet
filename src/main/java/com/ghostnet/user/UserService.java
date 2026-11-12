@@ -4,6 +4,7 @@ import com.ghostnet.common.ResourceNotFoundException;
 import com.ghostnet.common.ValidationException;
 import com.ghostnet.room.RoomMemberRecord;
 import com.ghostnet.room.RoomMemberRole;
+import com.ghostnet.messaging.DirectMessageRepository;
 import com.ghostnet.room.RoomMembershipRepository;
 import com.ghostnet.room.RoomRecord;
 import com.ghostnet.room.RoomRepository;
@@ -36,19 +37,22 @@ public class UserService {
     private final PresenceService presenceService;
     private final RoomRepository roomRepository;
     private final RoomMembershipRepository roomMembershipRepository;
+    private final DirectMessageRepository directMessageRepository;
 
     public UserService(UserRepository userRepository,
                        PasswordService passwordService,
                        AuthSessionService authSessionService,
                        PresenceService presenceService,
                        RoomRepository roomRepository,
-                       RoomMembershipRepository roomMembershipRepository) {
+                       RoomMembershipRepository roomMembershipRepository,
+                       DirectMessageRepository directMessageRepository) {
         this.userRepository = userRepository;
         this.passwordService = passwordService;
         this.authSessionService = authSessionService;
         this.presenceService = presenceService;
         this.roomRepository = roomRepository;
         this.roomMembershipRepository = roomMembershipRepository;
+        this.directMessageRepository = directMessageRepository;
     }
 
     /**
@@ -232,6 +236,15 @@ public class UserService {
 
     public List<UserDto> getAllUsers() {
         return userRepository.findAll().stream()
+                .map(u -> UserDto.from(u, presenceService.isOnline(u.id())))
+                .toList();
+    }
+
+    public List<UserDto> getDirectMessageContacts(String currentUserId) {
+        List<String> partnerIds = directMessageRepository.findDistinctConversationPartners(currentUserId);
+        return partnerIds.stream()
+                .map(userRepository::findById)
+                .flatMap(Optional::stream)
                 .map(u -> UserDto.from(u, presenceService.isOnline(u.id())))
                 .toList();
     }

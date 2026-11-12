@@ -135,6 +135,7 @@
         </div>
       </div>
     </nav>
+    <div class="console-backdrop" id="consoleBackdrop"></div>
 
     <!-- [01] VIEW: OVERVIEW DASHBOARD -->
     <section class="view-panel active" id="viewOverview">
@@ -150,7 +151,7 @@
 
       <!-- Telemetry Cards -->
       <div class="metric-grid">
-        <div class="metric-card accent-cyan">
+        <div class="metric-card accent-cyan admin-only-metric" id="cardConnectedNodes" style="display: none;">
           <span class="metric-label">Connected Operatives</span>
           <span class="metric-val" id="metricConnectedNodes">0</span>
           <span class="metric-sub">Active nodes on local hotspot</span>
@@ -165,7 +166,7 @@
           <span class="metric-val" id="metricActiveTransfers">0</span>
           <span class="metric-sub">Files currently in-transit</span>
         </div>
-        <div class="metric-card accent-blue">
+        <div class="metric-card accent-blue admin-only-metric" id="cardStorageUsage" style="display: none;">
           <span class="metric-label">Host Storage Gauge</span>
           <span class="metric-val" id="metricStorageUsage">--</span>
           <span class="metric-sub" id="metricStorageSub">Calculating free space...</span>
@@ -252,9 +253,12 @@
 
           <!-- Direct Messages Content -->
           <div class="sidebar-content" id="sidebarDmContent" style="display: none;">
+            <div style="margin-bottom: 10px;">
+              <input type="text" id="userSearchInput" class="input-field" placeholder="Search operative by username..." style="font-size: 0.8rem; padding: 6px 10px; width: 100%;">
+            </div>
             <div class="list-section-title">
-              <span>Connected Operatives</span>
-              <button id="refreshUsersBtn" class="btn btn-ghost btn-sm" title="Refresh Operatives" style="padding: 2px 6px;">
+              <span>Direct Conversations</span>
+              <button id="refreshUsersBtn" class="btn btn-ghost btn-sm" title="Refresh" style="padding: 2px 6px;">
                 <span id="refreshUsersIcon"></span>
               </button>
             </div>
@@ -283,6 +287,7 @@
           <div id="activeChatContainer" style="display: none; height: 100%; display: flex; flex-direction: column;">
             <div class="chat-header">
               <div class="chat-title-group">
+                <button type="button" id="mobileBackBtn" class="btn btn-ghost btn-sm mobile-back-btn" title="Back to Rooms">←</button>
                 <div class="avatar" id="activeChatAvatar">?</div>
                 <div>
                   <div style="display: flex; align-items: center; gap: 8px;">
@@ -798,6 +803,46 @@
       </div>
       <div class="modal-body">
         <div id="participantsList" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat Upload Confirm Modal with Vault Option -->
+  <div class="modal-overlay" id="chatUploadConfirmModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-title">Transmit Attachment</span>
+        <button class="btn btn-ghost btn-sm" id="closeChatUploadConfirmModalBtn">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.88rem; margin-bottom: 12px; color: var(--text-main);">
+          File: <strong id="chatUploadModalFilename" style="color: var(--neon-cyan);">document.pdf</strong> (<span id="chatUploadModalFilesize">0 KB</span>)
+        </p>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 16px;">
+          Ready to transmit to <strong id="chatUploadModalTarget">#General Mesh</strong>.
+        </p>
+        <div id="chatUploadVaultOptionGroup" style="background: var(--bg-surface); padding: 12px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 16px;">
+          <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="chatUploadSaveToVaultCheckbox" style="margin-top: 3px; accent-color: var(--neon-cyan);">
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">Also save an encrypted copy to my Private Vault</div>
+              <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 2px;">
+                Client-side zero-knowledge encryption with AES-256-GCM.
+              </div>
+            </div>
+          </label>
+          <div id="chatUploadVaultGuestNote" style="display: none; font-size: 0.75rem; color: var(--neon-yellow); margin-top: 8px;">
+            ⚠️ Ephemeral guests cannot access private vaults. Register an operative account to enable vault storage.
+          </div>
+          <div id="chatUploadVaultLockedNote" style="display: none; font-size: 0.75rem; color: var(--neon-cyan); margin-top: 8px;">
+            ℹ️ Your private vault is currently locked. Enter your PIN below to encrypt:
+            <input type="password" id="chatUploadVaultPinInput" class="input-field" placeholder="Vault PIN / Passphrase" style="margin-top: 6px;">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="cancelChatUploadConfirmBtn">Cancel</button>
+        <button type="button" class="btn btn-primary" id="confirmChatUploadBtn">Transmit File</button>
       </div>
     </div>
   </div>

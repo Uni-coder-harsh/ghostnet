@@ -267,12 +267,15 @@
       headerAvatar.textContent = (currentUser.displayName || currentUser.username || '?').charAt(0).toUpperCase();
       headerUsername.textContent = currentUser.displayName || currentUser.username;
 
-      if (currentUser.role === 'ROLE_ADMIN') {
+      const isAdmin = currentUser.role === 'ROLE_ADMIN';
+      const isGuest = currentUser.role === 'ROLE_GUEST' || currentUser.isGuest;
+
+      if (isAdmin) {
         rolePill.textContent = 'HOST ADMIN';
         rolePill.style.color = 'var(--neon-cyan)';
         rolePill.style.borderColor = 'rgba(0, 255, 200, 0.4)';
         navAdmin.style.display = 'flex';
-      } else if (currentUser.role === 'ROLE_GUEST' || currentUser.isGuest) {
+      } else if (isGuest) {
         rolePill.textContent = 'GUEST';
         rolePill.style.color = 'var(--neon-yellow)';
         rolePill.style.borderColor = 'rgba(251, 191, 36, 0.4)';
@@ -286,6 +289,20 @@
         guestWarningBanner.style.display = 'none';
       }
 
+      // Hide admin-only nav items for non-admins
+      if (navMembers) navMembers.style.display = isAdmin ? 'flex' : 'none';
+      if (navActivity) navActivity.style.display = isAdmin ? 'flex' : 'none';
+
+      // Hide admin-only telemetry cards and diagnostic tools for non-admins
+      document.querySelectorAll('.admin-only-metric').forEach(el => {
+        el.style.display = isAdmin ? 'flex' : 'none';
+      });
+      const diagBtn = document.getElementById('diagnosticBtn');
+      if (diagBtn) diagBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+
+      // Update nav index labels so they stay sequential
+      _renumberNavItems();
+
       // Populate settings fields
       const sUser = document.getElementById('settingsUsername');
       const sDisp = document.getElementById('settingsDisplayName');
@@ -298,7 +315,23 @@
       authActions.style.display = 'none';
       navAdmin.style.display = 'none';
       guestWarningBanner.style.display = 'none';
+      if (navMembers) navMembers.style.display = 'none';
+      if (navActivity) navActivity.style.display = 'none';
+      document.querySelectorAll('.admin-only-metric').forEach(el => el.style.display = 'none');
+      const diagBtn = document.getElementById('diagnosticBtn');
+      if (diagBtn) diagBtn.style.display = 'none';
     }
+  }
+
+  function _renumberNavItems() {
+    let idx = 1;
+    document.querySelectorAll('.console-nav-btn').forEach(btn => {
+      if (btn.style.display !== 'none') {
+        const idxEl = btn.querySelector('.nav-idx');
+        if (idxEl) idxEl.textContent = `[0${idx}]`;
+        idx++;
+      }
+    });
   }
 
   function openGuestModal() {
@@ -588,21 +621,34 @@
   }
 
   function setupEventListeners() {
+    const consoleBackdrop = document.getElementById('consoleBackdrop');
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const mobileBackBtn = document.getElementById('mobileBackBtn');
+
     // Console Nav Rail clicks
     document.querySelectorAll('.console-nav-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const viewId = btn.getAttribute('data-view');
         const sub = btn.getAttribute('data-sub');
         switchView(viewId, sub);
-        if (window.innerWidth <= 768) {
-          consoleNav.style.display = 'none';
-        }
+        consoleNav.classList.remove('open');
+        consoleBackdrop?.classList.remove('open');
       });
     });
 
-    // Mobile Menu Toggle
-    document.getElementById('mobileMenuBtn').addEventListener('click', () => {
-      consoleNav.style.display = (consoleNav.style.display === 'none' || !consoleNav.style.display) ? 'flex' : 'none';
+    // Mobile Menu Drawer Toggle
+    mobileMenuBtn?.addEventListener('click', () => {
+      consoleNav.classList.toggle('open');
+      consoleBackdrop?.classList.toggle('open');
+    });
+
+    consoleBackdrop?.addEventListener('click', () => {
+      consoleNav.classList.remove('open');
+      consoleBackdrop.classList.remove('open');
+    });
+
+    mobileBackBtn?.addEventListener('click', () => {
+      viewChat.classList.remove('chat-active');
     });
 
     // Overview Quick Buttons
@@ -651,7 +697,16 @@
       tabRoomsBtn.classList.remove('active');
       sidebarDmContent.style.display = 'block';
       sidebarRoomsContent.style.display = 'none';
-      loadUsers();
+      const q = document.getElementById('userSearchInput')?.value || '';
+      loadUsers(false, q);
+    });
+
+    document.getElementById('userSearchInput')?.addEventListener('input', (e) => {
+      loadUsers(false, e.target.value);
+    });
+    document.getElementById('refreshUsersBtn')?.addEventListener('click', () => {
+      const q = document.getElementById('userSearchInput')?.value || '';
+      loadUsers(false, q);
     });
 
     // Room Modals
@@ -677,7 +732,38 @@
       e.preventDefault();
       chatArea.classList.remove('drag-over');
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        uploadConversationAttachment(e.dataTransfer.files[0]);
+        promptChatUploadConfirmation(e.dataTransfer.files[0]);
+      }
+    });
+
+    // Chat Upload Confirm Modal
+    document.getElementById('closeChatUploadConfirmModalBtn')?.addEventListener('click', () => {
+      document.getElementById('chatUploadConfirmModal').classList.remove('active');
+    });
+    document.getElementById('cancelChatUploadConfirmBtn')?.addEventListener('click', () => {
+      document.getElementById('chatUploadConfirmModal').classList.remove('active');
+    });
+    document.getElementById('confirmChatUploadBtn')?.addEventListener('click', async () => {
+      document.getElementById('chatUploadConfirmModal').classList.remove('active');
+      if (!pendingChatUploadFile) return;
+      const file = pendingChatUploadFile;
+      const saveToVault = document.getElementById('chatUploadSaveToVaultCheckbox').checked;
+      const pinInput = document.getElementById('chatUploadVaultPinInput');
+
+      if (saveToVault && !vaultDerivedKey && pinInput && pinInput.value.trim() && vaultStatus?.salt) {
+        try {
+          const pin = pinInput.value.trim();
+          const cand = await deriveKeyFromPin(pin, hexToBytes(vaultStatus.salt));
+          const candBytes = await _vaultDigest(cand);
+          if (bytesToHex(candBytes).toLowerCase() === vaultStatus.authVerifier.toLowerCase()) {
+            vaultDerivedKey = cand;
+          }
+        } catch (ignored) {}
+      }
+
+      uploadConversationAttachment(file);
+      if (saveToVault && vaultDerivedKey) {
+        saveFileBufferToVault(file);
       }
     });
 
@@ -798,9 +884,12 @@
     });
   }
 
-  async function loadUsers(silent = false) {
+  async function loadUsers(silent = false, searchQuery = '') {
     try {
-      const res = await authFetch('/api/users/all');
+      const endpoint = searchQuery.trim()
+        ? `/api/users/search?query=${encodeURIComponent(searchQuery.trim())}`
+        : '/api/users/all';
+      const res = await authFetch(endpoint);
       if (!res.ok) return;
       const users = await res.json();
       const otherUsers = currentUser ? users.filter(u => u.id !== currentUser.id) : users;
@@ -810,7 +899,7 @@
 
       usersList.innerHTML = '';
       if (otherUsers.length === 0) {
-        usersList.innerHTML = `<div style="font-size: 0.78rem; color: var(--text-dim); padding: 8px 12px;">No other operatives connected</div>`;
+        usersList.innerHTML = `<div style="font-size: 0.78rem; color: var(--text-dim); padding: 8px 12px;">${searchQuery ? 'No operatives match search' : 'No direct conversations yet. Search an operative username above.'}</div>`;
         return;
       }
 
@@ -847,6 +936,7 @@
 
   async function selectConversation(type, id, name, isOnline = false, code = null, isOwner = false) {
     currentChat = { type, id, name, code, isOwner };
+    viewChat.classList.add('chat-active');
 
     document.querySelectorAll('.item-card').forEach(el => el.classList.remove('active'));
     const activeEl = document.querySelector(`.item-card[data-chat-id="${id}"]`);
@@ -1041,52 +1131,122 @@
   }
 
   function sendDirectMessage(recipientId, content) {
-    const payload = {
-      recipientId,
-      content,
-      clientMessageId: `cm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
-    };
+    const clientMessageId = `cm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const payload = { recipientId, content, clientMessageId };
 
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'SEND_DIRECT_MESSAGE', payload }));
-    } else {
-      authFetch('/api/messages/direct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      .then(r => r.json())
-      .then(dto => appendMessageToStream(dto, true))
-      .catch(() => showToast('Failed to deliver message', 'error'));
-    }
+    authFetch('/api/messages/direct', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(dto => {
+      appendMessageToStream(dto, true);
+    })
+    .catch(() => showToast('Failed to deliver message', 'error'));
   }
 
   function sendRoomMessage(roomId, content, attachmentId = null) {
-    const payload = {
-      roomId,
-      content,
-      attachmentId,
-      clientMessageId: `rm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
-    };
+    const clientMessageId = `rm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const payload = { roomId, content, attachmentId, clientMessageId };
 
-    if (ws && ws.readyState === WebSocket.OPEN && !attachmentId) {
-      ws.send(JSON.stringify({ type: 'SEND_ROOM_MESSAGE', payload }));
-    } else {
-      authFetch(`/api/messages/room/${roomId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      .then(r => r.json())
-      .then(dto => appendMessageToStream(dto, true))
-      .catch(() => showToast('Failed to post room message', 'error'));
-    }
+    authFetch(`/api/messages/room/${roomId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(dto => {
+      appendMessageToStream(dto, true);
+    })
+    .catch(() => showToast('Failed to post room message', 'error'));
   }
 
   // Conversation Attachment Uploading
+  let pendingChatUploadFile = null;
+
+  function promptChatUploadConfirmation(file) {
+    if (!currentChat) {
+      showToast('Select a room or operative before attaching files', 'info');
+      return;
+    }
+    pendingChatUploadFile = file;
+    document.getElementById('chatUploadModalFilename').textContent = file.name;
+    document.getElementById('chatUploadModalFilesize').textContent = formatBytes(file.size);
+    document.getElementById('chatUploadModalTarget').textContent = currentChat.name || 'Conversation';
+
+    const saveCb = document.getElementById('chatUploadSaveToVaultCheckbox');
+    const guestNote = document.getElementById('chatUploadVaultGuestNote');
+    const lockedNote = document.getElementById('chatUploadVaultLockedNote');
+    const pinInput = document.getElementById('chatUploadVaultPinInput');
+
+    const isGuest = currentUser && (currentUser.role === 'ROLE_GUEST' || currentUser.isGuest);
+
+    if (isGuest) {
+      saveCb.checked = false;
+      saveCb.disabled = true;
+      guestNote.style.display = 'block';
+      lockedNote.style.display = 'none';
+    } else {
+      saveCb.disabled = false;
+      saveCb.checked = true;
+      guestNote.style.display = 'none';
+      if (!vaultDerivedKey) {
+        lockedNote.style.display = 'block';
+        if (pinInput) pinInput.value = '';
+      } else {
+        lockedNote.style.display = 'none';
+      }
+    }
+
+    document.getElementById('chatUploadConfirmModal').classList.add('active');
+  }
+
   function handleChatFileSelected(e) {
     if (e.target.files && e.target.files.length > 0) {
-      uploadConversationAttachment(e.target.files[0]);
+      promptChatUploadConfirmation(e.target.files[0]);
+      e.target.value = '';
+    }
+  }
+
+  async function saveFileBufferToVault(file) {
+    if (!vaultDerivedKey) return;
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ciphertextBytes = await _vaultEncrypt(vaultDerivedKey, iv, arrayBuffer);
+      const digest = _hasSubtle
+        ? new Uint8Array(await crypto.subtle.digest('SHA-256', ciphertextBytes))
+        : _PJS.sha256(ciphertextBytes);
+      const sha256Hex = bytesToHex(digest);
+      const ivHex = bytesToHex(iv);
+
+      const blob = new Blob([ciphertextBytes], { type: 'application/octet-stream' });
+      const formData = new FormData();
+      formData.append('file', blob, file.name);
+      formData.append('filename', file.name);
+      formData.append('originalSize', file.size.toString());
+      formData.append('isClientEncrypted', 'true');
+      formData.append('iv', ivHex);
+      formData.append('checksum', sha256Hex);
+      if (currentVaultFolderId) formData.append('folderId', currentVaultFolderId);
+
+      const res = await authFetch('/api/vault/files', {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        showToast(`'${file.name}' also encrypted and saved to your Private Vault!`, 'success');
+        logActivity('VAULT', `Saved encrypted copy of '${file.name}'`);
+      }
+    } catch (e) {
+      console.warn('Failed to save to vault:', e);
     }
   }
 
@@ -1227,13 +1387,12 @@
       const saltBytes = crypto.getRandomValues(new Uint8Array(16));
       const saltHex = bytesToHex(saltBytes);
 
-      // 2. Derive AES-256-GCM key with PBKDF2 (600,000 iterations)
+      // 2. Derive key with PBKDF2 (WebCrypto on HTTPS, pure-JS on HTTP)
       const key = await deriveKeyFromPin(pin, saltBytes);
 
       // 3. Compute authVerifier = SHA-256(raw key bytes)
-      const rawKey = await crypto.subtle.exportKey('raw', key);
-      const verifierDigest = await crypto.subtle.digest('SHA-256', rawKey);
-      const verifierHex = bytesToHex(new Uint8Array(verifierDigest));
+      const verifierBytes = await _vaultDigest(key);
+      const verifierHex = bytesToHex(verifierBytes);
 
       // 4. Save zero-knowledge salt & verifier to host
       const res = await authFetch('/api/vault/init', {
@@ -1246,14 +1405,14 @@
         vaultStatus = await res.json();
         vaultDerivedKey = key;
         showToast('Zero-knowledge vault initialized successfully!', 'success');
-        logActivity('VAULT', 'Zero-knowledge vault initialized with client-side WebCrypto');
+        logActivity('VAULT', 'Vault initialized');
         showUnlockedVault();
       } else {
         const err = await res.json();
         showToast(err.message || 'Vault setup failed', 'error');
       }
     } catch (err) {
-      showToast('Crypto error initializing vault: ' + err.message, 'error');
+      showToast('Vault init error: ' + err.message, 'error');
     }
   }
 
@@ -1266,14 +1425,13 @@
       const saltBytes = hexToBytes(vaultStatus.salt);
       const candidateKey = await deriveKeyFromPin(pin, saltBytes);
 
-      const rawKey = await crypto.subtle.exportKey('raw', candidateKey);
-      const digest = await crypto.subtle.digest('SHA-256', rawKey);
-      const candidateVerifier = bytesToHex(new Uint8Array(digest));
+      const candidateVerifierBytes = await _vaultDigest(candidateKey);
+      const candidateVerifier = bytesToHex(candidateVerifierBytes);
 
       if (candidateVerifier.toLowerCase() === vaultStatus.authVerifier.toLowerCase()) {
         vaultDerivedKey = candidateKey;
         vaultUnlockPin.value = '';
-        showToast('Vault unlocked with AES-256 encryption key', 'success');
+        showToast('Vault unlocked', 'success');
         logActivity('VAULT', 'Vault unlocked via local PIN derivation');
         showUnlockedVault();
       } else {
@@ -1416,19 +1574,17 @@
       // 1. Generate 12-byte initialization vector (IV)
       const iv = crypto.getRandomValues(new Uint8Array(12));
 
-      // 2. Encrypt plaintext buffer using WebCrypto AES-GCM
-      const ciphertext = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv: iv },
-        vaultDerivedKey,
-        arrayBuffer
-      );
+      // 2. Encrypt plaintext buffer (WebCrypto or pure-JS fallback)
+      const ciphertextBytes = await _vaultEncrypt(vaultDerivedKey, iv, arrayBuffer);
 
       // 3. Compute SHA-256 checksum of ciphertext
-      const digest = await crypto.subtle.digest('SHA-256', ciphertext);
-      const sha256Hex = bytesToHex(new Uint8Array(digest));
+      const digest = _hasSubtle
+        ? new Uint8Array(await crypto.subtle.digest('SHA-256', ciphertextBytes))
+        : _PJS.sha256(ciphertextBytes);
+      const sha256Hex = bytesToHex(digest);
       const ivHex = bytesToHex(iv);
 
-      const blob = new Blob([ciphertext], { type: 'application/octet-stream' });
+      const blob = new Blob([ciphertextBytes], { type: 'application/octet-stream' });
       const formData = new FormData();
       formData.append('file', blob, file.name);
       formData.append('filename', file.name);
@@ -1478,12 +1634,8 @@
       if (!ivHeader) throw new Error('Missing initialization vector from host');
       const iv = hexToBytes(ivHeader);
 
-      showToast('Decrypting file with AES-256-GCM...', 'info');
-      const decrypted = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: iv },
-        vaultDerivedKey,
-        ciphertext
-      );
+      showToast('Decrypting file...', 'info');
+      const decrypted = await _vaultDecrypt(vaultDerivedKey, iv, ciphertext);
 
       // Trigger download of plaintext file
       const blob = new Blob([decrypted]);
@@ -1718,7 +1870,9 @@
       const res = await fetch('/api/network/addresses');
       if (res.ok) {
         const info = await res.json();
-        const primary = info.primaryAddress || location.hostname;
+        const primary = (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1')
+          ? location.hostname
+          : (info.primaryAddress || location.hostname);
         const port = info.port || location.port || '8080';
         hostIpText.textContent = `${primary}:${port}`;
         document.getElementById('overviewAccessUrl').textContent = `http://${primary}:${port}/`;
@@ -1735,7 +1889,9 @@
 
       if (netRes.ok) {
         const net = await netRes.json();
-        const primary = net.primaryAddress || location.hostname;
+        const primary = (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1')
+          ? location.hostname
+          : (net.primaryAddress || location.hostname);
         const port = net.port || location.port || '8080';
         hostIpText.textContent = `${primary}:${port}`;
         document.getElementById('overviewAccessUrl').textContent = `http://${primary}:${port}/`;
@@ -1934,7 +2090,7 @@
 
   function startPeriodicSync() {
     clearInterval(pollTimer);
-    pollTimer = setInterval(pollActiveMessages, 3000);
+    pollTimer = setInterval(pollActiveMessages, 2000);
 
     clearInterval(sidebarSyncTimer);
     sidebarSyncTimer = setInterval(() => {
@@ -1962,31 +2118,255 @@
 
   // =========================================================================
   // 11. CRYPTO & UTILITY HELPERS
+  // Works on both HTTPS (WebCrypto) and HTTP hotspot/university WiFi (pure-JS)
   // =========================================================================
 
+  // Detect secure context (HTTPS or localhost)
+  const _hasSubtle = !!(window.crypto && window.crypto.subtle);
+
+  // ---- Pure-JS fallback primitives ----
+  const _PJS = (() => {
+    // SHA-256 (pure JS)
+    const K32 = new Uint32Array([
+      0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+      0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+      0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+      0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+      0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+      0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+      0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+      0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+    ]);
+    function rotr32(x, n) { return (x >>> n) | (x << (32 - n)); }
+    function sha256(data) {
+      const b = data instanceof Uint8Array ? data : new Uint8Array(data);
+      const L = b.length, bL = L * 8;
+      const pad = (L % 64 < 56) ? (56 - L % 64) : (120 - L % 64);
+      const T = L + pad + 8, p = new Uint8Array(T);
+      p.set(b); p[L] = 0x80;
+      const dv = new DataView(p.buffer);
+      dv.setUint32(T - 8, Math.floor(bL / 0x100000000), false);
+      dv.setUint32(T - 4, bL >>> 0, false);
+      let h0=0x6a09e667,h1=0xbb67ae85,h2=0x3c6ef372,h3=0xa54ff53a,
+          h4=0x510e527f,h5=0x9b05688c,h6=0x1f83d9ab,h7=0x5be0cd19;
+      const w = new Uint32Array(64);
+      for (let o = 0; o < T; o += 64) {
+        for (let i = 0; i < 16; i++) w[i] = dv.getUint32(o + i*4, false);
+        for (let i = 16; i < 64; i++) {
+          const s0 = rotr32(w[i-15],7)^rotr32(w[i-15],18)^(w[i-15]>>>3);
+          const s1 = rotr32(w[i-2],17)^rotr32(w[i-2],19)^(w[i-2]>>>10);
+          w[i] = (w[i-16]+s0+w[i-7]+s1)>>>0;
+        }
+        let a=h0,b2=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;
+        for (let i = 0; i < 64; i++) {
+          const S1=(rotr32(e,6)^rotr32(e,11)^rotr32(e,25));
+          const ch=(e&f)^((~e)&g);
+          const t1=(h+S1+ch+K32[i]+w[i])>>>0;
+          const S0=(rotr32(a,2)^rotr32(a,13)^rotr32(a,22));
+          const mj=(a&b2)^(a&c)^(b2&c);
+          h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b2;b2=a;a=(t1+S0+mj)>>>0;
+        }
+        h0=(h0+a)>>>0;h1=(h1+b2)>>>0;h2=(h2+c)>>>0;h3=(h3+d)>>>0;
+        h4=(h4+e)>>>0;h5=(h5+f)>>>0;h6=(h6+g)>>>0;h7=(h7+h)>>>0;
+      }
+      const r = new Uint8Array(32), rv = new DataView(r.buffer);
+      rv.setUint32(0,h0,false);rv.setUint32(4,h1,false);rv.setUint32(8,h2,false);rv.setUint32(12,h3,false);
+      rv.setUint32(16,h4,false);rv.setUint32(20,h5,false);rv.setUint32(24,h6,false);rv.setUint32(28,h7,false);
+      return r;
+    }
+    function hmac(key, msg) {
+      let k = key.length > 64 ? sha256(key) : key;
+      const ik = new Uint8Array(64), ok = new Uint8Array(64);
+      for (let i=0;i<k.length;i++){ik[i]=k[i]^0x36;ok[i]=k[i]^0x5c;}
+      for (let i=k.length;i<64;i++){ik[i]=0x36;ok[i]=0x5c;}
+      const inner = new Uint8Array(64+msg.length);
+      inner.set(ik);inner.set(msg,64);
+      const ih = sha256(inner);
+      const outer = new Uint8Array(96);
+      outer.set(ok);outer.set(ih,64);
+      return sha256(outer);
+    }
+    function pbkdf2(pwd, salt, iters, keyLen) {
+      const blocks = Math.ceil(keyLen / 32), out = new Uint8Array(blocks*32);
+      for (let bi = 1; bi <= blocks; bi++) {
+        const bs = new Uint8Array(salt.length+4);
+        bs.set(salt);bs[salt.length]=(bi>>>24)&0xff;bs[salt.length+1]=(bi>>>16)&0xff;
+        bs[salt.length+2]=(bi>>>8)&0xff;bs[salt.length+3]=bi&0xff;
+        let u = hmac(pwd, bs), acc = new Uint8Array(u);
+        for (let i=1;i<iters;i++){u=hmac(pwd,u);for(let j=0;j<32;j++)acc[j]^=u[j];}
+        out.set(acc, (bi-1)*32);
+      }
+      return out.slice(0, keyLen);
+    }
+    // AES-256 key expansion
+    const SB = new Uint8Array([
+      99,124,119,123,242,107,111,197,48,1,103,43,254,215,171,118,202,130,201,125,250,89,71,240,173,
+      212,162,175,156,164,114,192,183,253,147,38,54,63,247,204,52,165,229,241,113,216,49,21,4,199,35,
+      195,24,150,5,154,7,18,128,226,235,39,178,117,9,131,44,26,27,110,90,160,82,59,214,179,41,227,47,
+      132,83,209,0,237,32,252,177,91,106,203,190,57,74,76,88,207,208,239,170,251,67,77,51,133,69,249,
+      2,127,80,60,159,168,81,163,64,143,146,157,56,245,188,182,218,33,16,255,243,210,205,12,19,236,95,
+      151,68,23,196,167,126,61,100,93,25,115,96,129,79,220,34,42,144,136,70,238,184,20,222,94,11,219,
+      224,50,58,10,73,6,36,92,194,211,172,98,145,149,228,121,231,200,55,109,141,213,78,169,108,86,244,
+      234,101,122,174,8,186,120,37,46,28,166,180,198,232,221,116,31,75,189,139,138,112,62,181,102,72,3,
+      246,14,97,53,87,185,134,193,29,158,225,248,152,17,105,217,142,148,155,30,135,233,206,85,40,223,
+      140,161,137,13,191,230,66,104,65,153,45,15,176,84,187,22
+    ]);
+    const RC = [0x01000000,0x02000000,0x04000000,0x08000000,0x10000000,0x20000000,0x40000000,0x80000000,0x1b000000,0x36000000];
+    function subW(w){return(SB[(w>>>24)&0xff]<<24)|(SB[(w>>>16)&0xff]<<16)|(SB[(w>>>8)&0xff]<<8)|SB[w&0xff];}
+    function expandKey(k) {
+      const W = new Uint32Array(60), kv = new DataView(k.buffer,k.byteOffset,32);
+      for(let i=0;i<8;i++)W[i]=kv.getUint32(i*4,false);
+      let rc=0;
+      for(let i=8;i<60;i++){
+        let t=W[i-1];
+        if(i%8===0)t=subW((t<<8)|(t>>>24))^RC[rc++];
+        else if(i%8===4)t=subW(t);
+        W[i]=(W[i-8]^t)>>>0;
+      }
+      return W;
+    }
+    // T-tables (precomputed lazily)
+    let T0,T1,T2,T3;
+    function buildTables(){
+      if(T0)return;
+      T0=new Uint32Array(256);T1=new Uint32Array(256);T2=new Uint32Array(256);T3=new Uint32Array(256);
+      function xm(x){return((x<<1)^(((x>>7)&1)*0x11b))&0xff;}
+      for(let i=0;i<256;i++){
+        const s=SB[i],s2=xm(s),s3=s2^s,t=(s2<<24)|(s<<16)|(s<<8)|s3;
+        T0[i]=t>>>0;T1[i]=((t>>>8)|(t<<24))>>>0;T2[i]=((t>>>16)|(t<<16))>>>0;T3[i]=((t>>>24)|(t<<8))>>>0;
+      }
+    }
+    function encBlock(W, inp, iOff, out, oOff){
+      buildTables();
+      const v=new DataView(inp.buffer,inp.byteOffset+iOff,16);
+      let s0=v.getUint32(0,false)^W[0],s1=v.getUint32(4,false)^W[1],
+          s2=v.getUint32(8,false)^W[2],s3=v.getUint32(12,false)^W[3],r=4;
+      for(let rnd=1;rnd<14;rnd++){
+        const t0=(T0[(s0>>>24)&0xff]^T1[(s1>>>16)&0xff]^T2[(s2>>>8)&0xff]^T3[s3&0xff]^W[r++])>>>0;
+        const t1=(T0[(s1>>>24)&0xff]^T1[(s2>>>16)&0xff]^T2[(s3>>>8)&0xff]^T3[s0&0xff]^W[r++])>>>0;
+        const t2=(T0[(s2>>>24)&0xff]^T1[(s3>>>16)&0xff]^T2[(s0>>>8)&0xff]^T3[s1&0xff]^W[r++])>>>0;
+        const t3=(T0[(s3>>>24)&0xff]^T1[(s0>>>16)&0xff]^T2[(s1>>>8)&0xff]^T3[s2&0xff]^W[r++])>>>0;
+        s0=t0;s1=t1;s2=t2;s3=t3;
+      }
+      const ov=new DataView(out.buffer,out.byteOffset+oOff,16);
+      ov.setUint8(0,SB[(s0>>>24)&0xff]^(W[r]>>>24));ov.setUint8(1,SB[(s1>>>16)&0xff]^((W[r]>>>16)&0xff));
+      ov.setUint8(2,SB[(s2>>>8)&0xff]^((W[r]>>>8)&0xff));ov.setUint8(3,SB[s3&0xff]^(W[r++]&0xff));
+      ov.setUint8(4,SB[(s1>>>24)&0xff]^(W[r]>>>24));ov.setUint8(5,SB[(s2>>>16)&0xff]^((W[r]>>>16)&0xff));
+      ov.setUint8(6,SB[(s3>>>8)&0xff]^((W[r]>>>8)&0xff));ov.setUint8(7,SB[s0&0xff]^(W[r++]&0xff));
+      ov.setUint8(8,SB[(s2>>>24)&0xff]^(W[r]>>>24));ov.setUint8(9,SB[(s3>>>16)&0xff]^((W[r]>>>16)&0xff));
+      ov.setUint8(10,SB[(s0>>>8)&0xff]^((W[r]>>>8)&0xff));ov.setUint8(11,SB[s1&0xff]^(W[r++]&0xff));
+      ov.setUint8(12,SB[(s3>>>24)&0xff]^(W[r]>>>24));ov.setUint8(13,SB[(s0>>>16)&0xff]^((W[r]>>>16)&0xff));
+      ov.setUint8(14,SB[(s1>>>8)&0xff]^((W[r]>>>8)&0xff));ov.setUint8(15,SB[s2&0xff]^(W[r]&0xff));
+    }
+    function ghMul(x, y) {
+      const z=new Uint32Array(4),v=new Uint32Array(4),yv=new DataView(y.buffer,y.byteOffset,16);
+      v[0]=yv.getUint32(0,false);v[1]=yv.getUint32(4,false);v[2]=yv.getUint32(8,false);v[3]=yv.getUint32(12,false);
+      for(let i=0;i<16;i++){
+        for(let bit=7;bit>=0;bit--){
+          if((x[i]>>>bit)&1){z[0]^=v[0];z[1]^=v[1];z[2]^=v[2];z[3]^=v[3];}
+          const lsb=v[3]&1;
+          v[3]=(v[3]>>>1)|((v[2]&1)<<31);v[2]=(v[2]>>>1)|((v[1]&1)<<31);
+          v[1]=(v[1]>>>1)|((v[0]&1)<<31);v[0]=(v[0]>>>1);
+          if(lsb)v[0]^=0xe1000000;
+        }
+      }
+      const o=new Uint8Array(16),ov=new DataView(o.buffer);
+      ov.setUint32(0,z[0]>>>0,false);ov.setUint32(4,z[1]>>>0,false);
+      ov.setUint32(8,z[2]>>>0,false);ov.setUint32(12,z[3]>>>0,false);
+      return o;
+    }
+    function ghash(H, data) {
+      let y=new Uint8Array(16),blk=new Uint8Array(16);
+      for(let o=0;o<data.length;o+=16){
+        blk.fill(0);blk.set(data.subarray(o,Math.min(o+16,data.length)),0);
+        for(let i=0;i<16;i++)y[i]^=blk[i];
+        y=ghMul(y,H);
+      }
+      return y;
+    }
+    function gcmJ0(W, iv) {
+      if(iv.length===12){const j=new Uint8Array(16);j.set(iv);j[15]=1;return j;}
+      const H=new Uint8Array(16);encBlock(W,new Uint8Array(16),0,H,0);
+      const ib=iv.length*8, pl=Math.ceil(iv.length/16)*16+16;
+      const gd=new Uint8Array(pl);gd.set(iv);
+      const ldv=new DataView(gd.buffer,pl-16,16);
+      ldv.setUint32(8,Math.floor(ib/0x100000000),false);ldv.setUint32(12,ib>>>0,false);
+      return ghash(H,gd);
+    }
+    function gcmCtr(W,J0,plain){
+      const ctr=new Uint8Array(J0),ks=new Uint8Array(16),out=new Uint8Array(plain.length);
+      for(let o=0;o<plain.length;o+=16){
+        const cv=new DataView(ctr.buffer);cv.setUint32(12,(cv.getUint32(12,false)+1)>>>0,false);
+        encBlock(W,ctr,0,ks,0);
+        for(let i=0;i<Math.min(16,plain.length-o);i++)out[o+i]=plain[o+i]^ks[i];
+      }
+      return out;
+    }
+    function gcmTag(W, H, J0, aad, cipher) {
+      const aLen=aad.length,cLen=cipher.length;
+      const ap=(16-aLen%16)%16,cp=(16-cLen%16)%16;
+      const gd=new Uint8Array(aLen+ap+cLen+cp+16);
+      gd.set(aad);gd.set(cipher,aLen+ap);
+      const ldv=new DataView(gd.buffer,gd.length-16,16);
+      ldv.setUint32(0,Math.floor(aLen*8/0x100000000),false);ldv.setUint32(4,(aLen*8)>>>0,false);
+      ldv.setUint32(8,Math.floor(cLen*8/0x100000000),false);ldv.setUint32(12,(cLen*8)>>>0,false);
+      const S=ghash(H,gd),eJ=new Uint8Array(16),tag=new Uint8Array(16);
+      encBlock(W,J0,0,eJ,0);for(let i=0;i<16;i++)tag[i]=S[i]^eJ[i];
+      return tag;
+    }
+    function encrypt(keyBytes, ivBytes, plain, aad=new Uint8Array(0)){
+      const W=expandKey(keyBytes),H=new Uint8Array(16);
+      encBlock(W,new Uint8Array(16),0,H,0);
+      const J0=gcmJ0(W,ivBytes),c=gcmCtr(W,J0,plain),tag=gcmTag(W,H,J0,aad,c);
+      const out=new Uint8Array(c.length+16);out.set(c);out.set(tag,c.length);return out;
+    }
+    function decrypt(keyBytes, ivBytes, cipherAndTag, aad=new Uint8Array(0)){
+      const W=expandKey(keyBytes),H=new Uint8Array(16);
+      encBlock(W,new Uint8Array(16),0,H,0);
+      const pLen=cipherAndTag.length-16,cipher=cipherAndTag.subarray(0,pLen),expectedTag=cipherAndTag.subarray(pLen);
+      const J0=gcmJ0(W,ivBytes),computedTag=gcmTag(W,H,J0,aad,cipher);
+      let diff=0;for(let i=0;i<16;i++)diff|=(expectedTag[i]^computedTag[i]);
+      if(diff!==0)throw new Error('Vault integrity check failed — wrong PIN or corrupted data');
+      return gcmCtr(W,J0,cipher);
+    }
+    return { sha256, pbkdf2, encrypt, decrypt };
+  })();
+
+  // ---- Crypto abstraction (WebCrypto when available, pure-JS fallback on HTTP) ----
   async function deriveKeyFromPin(pin, saltBytes) {
     const enc = new TextEncoder();
-    const pinBuffer = enc.encode(pin);
-    const baseKey = await crypto.subtle.importKey(
-      'raw',
-      pinBuffer,
-      'PBKDF2',
-      false,
-      ['deriveKey']
-    );
+    const pinBuf = enc.encode(pin);
+    if (_hasSubtle) {
+      const base = await crypto.subtle.importKey('raw', pinBuf, 'PBKDF2', false, ['deriveKey']);
+      return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: saltBytes, iterations: 600000, hash: 'SHA-256' },
+        base, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
+      );
+    }
+    // Pure-JS fallback — 100k iters (mobile-friendly, still strong)
+    return { _pjs: true, raw: _PJS.pbkdf2(pinBuf, saltBytes, 100000, 32) };
+  }
 
-    return crypto.subtle.deriveKey(
-      {
-        name: 'PBKDF2',
-        salt: saltBytes,
-        iterations: 600000,
-        hash: 'SHA-256'
-      },
-      baseKey,
-      { name: 'AES-GCM', length: 256 },
-      true,
-      ['encrypt', 'decrypt']
-    );
+  async function _vaultDigest(key) {
+    if (_hasSubtle) {
+      const raw = await crypto.subtle.exportKey('raw', key);
+      return new Uint8Array(await crypto.subtle.digest('SHA-256', raw));
+    }
+    return _PJS.sha256(key.raw);
+  }
+
+  async function _vaultEncrypt(key, iv, buf) {
+    if (_hasSubtle) {
+      return new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, buf));
+    }
+    return _PJS.encrypt(key.raw, iv, new Uint8Array(buf));
+  }
+
+  async function _vaultDecrypt(key, iv, buf) {
+    if (_hasSubtle) {
+      return await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, buf);
+    }
+    return _PJS.decrypt(key.raw, iv, new Uint8Array(buf)).buffer;
   }
 
   function bytesToHex(bytes) {

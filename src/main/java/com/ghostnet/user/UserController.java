@@ -45,12 +45,21 @@ public class UserController {
 
     @GetMapping("/all")
     public ResponseEntity<List<UserDto>> getAllUsers() {
-        return ResponseEntity.ok(userService.getAllUsers());
+        UserRecord current = SecurityContext.requireUser();
+        if (current.isAdmin()) {
+            return ResponseEntity.ok(userService.getAllUsers());
+        }
+        return ResponseEntity.ok(userService.getDirectMessageContacts(current.id()));
     }
 
     @GetMapping("/online")
     public ResponseEntity<List<UserDto>> getOnlineUsers() {
-        List<UserDto> all = userService.getAllUsers();
-        return ResponseEntity.ok(all.stream().filter(UserDto::online).toList());
+        UserRecord current = SecurityContext.requireUser();
+        if (current.isAdmin()) {
+            List<UserDto> all = userService.getAllUsers();
+            return ResponseEntity.ok(all.stream().filter(UserDto::online).toList());
+        }
+        List<UserDto> contacts = userService.getDirectMessageContacts(current.id());
+        return ResponseEntity.ok(contacts.stream().filter(UserDto::online).toList());
     }
 }
