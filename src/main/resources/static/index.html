@@ -10,13 +10,13 @@
 
   <!-- Top App Header -->
   <header class="app-header">
-    <div style="display: flex; align-items: center; gap: 10px;">
-      <button id="mobileMenuBtn" class="btn btn-ghost btn-sm mobile-menu-btn" title="Toggle Sidebar">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <button id="mobileMenuBtn" class="btn btn-ghost btn-sm mobile-menu-btn" title="Toggle Navigation">
         <span id="menuIcon"></span>
       </button>
       <a href="/" class="brand">
         <span class="brand-logo"><span id="brandIcon"></span> GHOSTNET</span>
-        <span class="brand-badge">V1.0</span>
+        <span class="brand-badge">AIR-GAPPED OFFLINE</span>
       </a>
     </div>
 
@@ -31,123 +31,623 @@
     </div>
 
     <div class="header-actions">
-      <a href="/admin.html" id="adminLink" class="btn btn-ghost btn-sm" style="display: none;">
-        <span id="shieldIcon"></span> <span class="hide-mobile">Host Admin</span>
-      </a>
-      <div id="userProfileBtn" class="item-info" style="cursor: pointer; display: none;" title="Account Profile">
-        <div class="avatar" id="headerAvatar">?</div>
-        <span id="headerUsername" class="item-name hide-mobile">Operative</span>
+      <!-- Unauthenticated action buttons -->
+      <div id="unauthActions" style="display: flex; align-items: center; gap: 8px;">
+        <button id="joinGuestQuickBtn" class="btn btn-ghost btn-sm" style="color: var(--neon-yellow); border-color: rgba(251, 191, 36, 0.4);">
+          <span id="guestQuickIcon"></span> Join as Guest
+        </button>
+        <button id="loginOpenBtn" class="btn btn-primary btn-sm">Login / Register</button>
       </div>
-      <button id="loginOpenBtn" class="btn btn-primary btn-sm">Login / Register</button>
+
+      <!-- Authenticated operative profile & actions -->
+      <div id="authActions" style="display: none; align-items: center; gap: 10px;">
+        <span id="rolePill" class="code-pill" style="font-size: 0.7rem; color: var(--neon-cyan);">OPERATIVE</span>
+        <div id="userProfileBtn" class="item-info" style="cursor: pointer;" title="Operative Profile & Settings">
+          <div class="avatar" id="headerAvatar">?</div>
+          <span id="headerUsername" class="item-name hide-mobile">Operative</span>
+        </div>
+        <button id="headerLogoutBtn" class="btn btn-ghost btn-sm" title="Disconnect">
+          <span id="headerLogoutIcon"></span>
+        </button>
+      </div>
     </div>
   </header>
 
-  <!-- Main App Layout -->
-  <main class="app-container">
+  <!-- Ephemeral Guest Warning Banner (Visible only for guests) -->
+  <div id="guestWarningBanner" class="guest-warning-strip" style="display: none;">
+    <div>
+      <strong>EPHEMERAL GUEST SESSION:</strong> You are browsing as a temporary guest. Files shared in chats expire in 24 hours. Private vaults require registration.
+    </div>
+    <button id="guestUpgradeBtn" class="btn btn-primary btn-sm" style="padding: 2px 8px; font-size: 0.72rem;">
+      Register Operative Account
+    </button>
+  </div>
 
-    <!-- Left Navigation Sidebar -->
-    <aside class="sidebar" id="appSidebar">
-      <div class="sidebar-tabs">
-        <button class="tab-btn active" id="tabRoomsBtn">
-          <span id="roomsIcon"></span> Rooms & Enclaves
-        </button>
-        <button class="tab-btn" id="tabDmBtn">
-          <span id="usersIcon"></span> Direct Messages (<span id="onlineCount">0</span>)
-        </button>
-      </div>
+  <!-- Main Console Shell -->
+  <div style="display: flex; height: calc(100vh - var(--header-height)); overflow: hidden;">
 
-      <!-- Rooms Tab Content (Default Active) -->
-      <div class="sidebar-content" id="sidebarRoomsContent">
-        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-          <button id="openCreateRoomBtn" class="btn btn-primary btn-sm" style="flex: 1;">
-            <span id="plusIcon"></span> Create Room
+    <!-- Left Navigation Console Rail -->
+    <nav class="console-nav" id="consoleNav">
+      <div>
+        <div class="console-nav-section-label">Operations Console</div>
+        <div class="console-nav-list">
+          <button class="console-nav-btn active" id="navOverview" data-view="viewOverview">
+            <span class="nav-idx">[01]</span>
+            <span id="navIconOverview"></span>
+            <span>Overview</span>
           </button>
-          <button id="openJoinRoomBtn" class="btn btn-ghost btn-sm" style="flex: 1;">
-            <span id="hashIcon"></span> Join Code
+          <button class="console-nav-btn" id="navMessages" data-view="viewChat" data-sub="dm">
+            <span class="nav-idx">[02]</span>
+            <span id="navIconMessages"></span>
+            <span>Messages</span>
+            <span class="nav-badge" id="dmBadgeCount">0</span>
+          </button>
+          <button class="console-nav-btn" id="navRooms" data-view="viewChat" data-sub="rooms">
+            <span class="nav-idx">[03]</span>
+            <span id="navIconRooms"></span>
+            <span>Rooms</span>
+            <span class="nav-badge" id="roomsBadgeCount">0</span>
+          </button>
+          <button class="console-nav-btn" id="navTransfers" data-view="viewTransfers">
+            <span class="nav-idx">[04]</span>
+            <span id="navIconTransfers"></span>
+            <span>File Transfers</span>
+            <span class="nav-badge" id="transfersBadgeCount">0</span>
+          </button>
+          <button class="console-nav-btn" id="navVault" data-view="viewVault">
+            <span class="nav-idx">[05]</span>
+            <span id="navIconVault"></span>
+            <span>Private Vault</span>
+            <span class="nav-badge" id="vaultBadge" style="font-size: 0.6rem;">LOCKED</span>
+          </button>
+          <button class="console-nav-btn" id="navMembers" data-view="viewMembers">
+            <span class="nav-idx">[06]</span>
+            <span id="navIconMembers"></span>
+            <span>Network Members</span>
+          </button>
+          <button class="console-nav-btn" id="navActivity" data-view="viewActivity">
+            <span class="nav-idx">[07]</span>
+            <span id="navIconActivity"></span>
+            <span>Activity Log</span>
+          </button>
+          <button class="console-nav-btn" id="navSettings" data-view="viewSettings">
+            <span class="nav-idx">[08]</span>
+            <span id="navIconSettings"></span>
+            <span>Settings</span>
+          </button>
+          <button class="console-nav-btn" id="navAdmin" data-view="viewAdmin" style="display: none;">
+            <span class="nav-idx">[09]</span>
+            <span id="navIconAdmin"></span>
+            <span>Host Admin</span>
           </button>
         </div>
-
-        <div class="list-section-title">My Rooms (Enclaves)</div>
-        <div id="myRoomsList"></div>
-
-        <div class="list-section-title" style="margin-top: 1rem;">Public Discovery</div>
-        <div id="publicRoomsList"></div>
       </div>
 
-      <!-- DM Tab Content -->
-      <div class="sidebar-content" id="sidebarDmContent" style="display: none;">
-        <div class="list-section-title">
-          <span>1-on-1 Operatives</span>
-          <button id="refreshUsersBtn" class="btn btn-ghost btn-sm" title="Refresh Users" style="padding: 2px 6px;">
-            <span id="refreshUsersIcon"></span>
-          </button>
+      <!-- Quick Host Network Status Bottom Bar -->
+      <div style="padding: 12px 16px; border-top: 1px solid var(--border-color); font-size: 0.72rem; color: var(--text-dim);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+          <span>SIGNAL:</span>
+          <span style="color: var(--neon-cyan); font-family: var(--font-mono);">AIR-GAPPED</span>
         </div>
-        <div id="usersList">
-          <!-- Dynamically populated users -->
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <span>HOST:</span>
+          <span style="color: var(--text-muted); font-family: var(--font-mono);">STANDALONE</span>
         </div>
       </div>
-    </aside>
+    </nav>
 
-    <!-- Main Chat Workspace -->
-    <section class="chat-area">
+    <!-- [01] VIEW: OVERVIEW DASHBOARD -->
+    <section class="view-panel active" id="viewOverview">
+      <div class="view-header">
+        <div class="view-title-wrap">
+          <h1 class="view-title"><span id="overviewHeaderIcon"></span> NETWORK OPERATIONS OVERVIEW</h1>
+          <p class="view-subtitle">Private local wireless environment status and active node metrics</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="refreshOverviewBtn" class="btn btn-ghost btn-sm"><span id="overviewRefreshIcon"></span> Refresh Status</button>
+        </div>
+      </div>
 
-      <!-- Default Empty State -->
-      <div class="empty-chat" id="emptyChatPlaceholder">
-        <div class="empty-chat-icon" id="placeholderGhostIcon"></div>
-        <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.5rem;">
-          GHOSTNET OFFLINE ENVIRONMENT
-        </h2>
-        <p style="font-size: 0.85rem; line-height: 1.6; color: var(--text-muted); margin-bottom: 1.5rem;">
-          Private offline-first communication platform hosted entirely on the host laptop. Select a registered user to initiate direct messages or join a communication room using a unique room code.
+      <!-- Telemetry Cards -->
+      <div class="metric-grid">
+        <div class="metric-card accent-cyan">
+          <span class="metric-label">Connected Operatives</span>
+          <span class="metric-val" id="metricConnectedNodes">0</span>
+          <span class="metric-sub">Active nodes on local hotspot</span>
+        </div>
+        <div class="metric-card accent-green">
+          <span class="metric-label">Communication Enclaves</span>
+          <span class="metric-val" id="metricTotalRooms">1</span>
+          <span class="metric-sub">#General Mesh active</span>
+        </div>
+        <div class="metric-card accent-yellow">
+          <span class="metric-label">Active Transfers</span>
+          <span class="metric-val" id="metricActiveTransfers">0</span>
+          <span class="metric-sub">Files currently in-transit</span>
+        </div>
+        <div class="metric-card accent-blue">
+          <span class="metric-label">Host Storage Gauge</span>
+          <span class="metric-val" id="metricStorageUsage">--</span>
+          <span class="metric-sub" id="metricStorageSub">Calculating free space...</span>
+        </div>
+      </div>
+
+      <!-- Network Reachability & Hotspot Configuration Card -->
+      <div class="card-box">
+        <div class="card-box-header">
+          <div class="card-box-title"><span id="wifiBoxIcon"></span> Local Network Access Coordinates</div>
+          <span class="code-pill">NO INTERNET REQUIRED</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.6;">
+          Other laptops, smartphones, and tablets can join this private platform by connecting to this laptop's Wi-Fi hotspot and opening the browser URL below:
         </p>
-        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-          <button id="quickJoinRoomBtn" class="btn btn-primary btn-sm">Join Room by Code</button>
-          <button id="quickCreateRoomBtn" class="btn btn-ghost btn-sm">Create New Room</button>
+        <div style="display: flex; align-items: center; gap: 12px; background: var(--bg-darkest); padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 16px;">
+          <code id="overviewAccessUrl" style="font-size: 1.05rem; color: var(--neon-cyan); font-family: var(--font-mono); font-weight: bold; flex: 1;">
+            http://127.0.0.1:8080/
+          </code>
+          <button id="copyUrlBtn" class="btn btn-ghost btn-sm" title="Copy URL">Copy URL</button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; font-size: 0.8rem; color: var(--text-dim); line-height: 1.5;">
+          <div style="background: var(--bg-elevated); padding: 12px; border-radius: var(--radius-sm);">
+            <strong style="color: var(--text-main);">Hotspot Setup:</strong> Connect clients to this computer's Wi-Fi hotspot. No mobile data or Internet tethering required.
+          </div>
+          <div style="background: var(--bg-elevated); padding: 12px; border-radius: var(--radius-sm);">
+            <strong style="color: var(--text-main);">Zero Installs:</strong> Connected devices access GhostNet through standard Chrome, Safari, Firefox, or Edge browsers.
+          </div>
         </div>
       </div>
 
-      <!-- Active Chat Workspace (hidden until conversation selected) -->
-      <div id="activeChatContainer" style="display: none; height: 100%; display: flex; flex-direction: column;">
-        <div class="chat-header">
-          <div class="chat-title-group">
-            <div class="avatar" id="activeChatAvatar">?</div>
-            <div>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span class="chat-title" id="activeChatTitle">Chat</span>
-                <span class="code-pill" id="activeChatCode" style="display: none;"></span>
-              </div>
-              <div class="item-sub" id="activeChatSubtitle">Connecting...</div>
+      <!-- Quick Actions Grid -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;">
+        <div class="card-box" style="margin-bottom: 0;">
+          <div class="card-box-title" style="margin-bottom: 8px;"><span id="quickMsgIcon"></span> Direct Transmissions</div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">Start a 1-on-1 encrypted channel with any connected operative.</p>
+          <button id="quickOpenDmsBtn" class="btn btn-primary btn-sm" style="width: 100%; justify-content: center;">Open Messages</button>
+        </div>
+        <div class="card-box" style="margin-bottom: 0;">
+          <div class="card-box-title" style="margin-bottom: 8px;"><span id="quickRoomIcon"></span> Communication Enclaves</div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">Join or create multi-user rooms using unique room codes.</p>
+          <button id="quickOpenRoomsBtn" class="btn btn-ghost btn-sm" style="width: 100%; justify-content: center;">Browse Rooms</button>
+        </div>
+        <div class="card-box" style="margin-bottom: 0;">
+          <div class="card-box-title" style="margin-bottom: 8px;"><span id="quickVaultIcon"></span> Encrypted Private Vault</div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">Store and retrieve files in your zero-knowledge AES-256 vault.</p>
+          <button id="quickOpenVaultBtn" class="btn btn-ghost btn-sm" style="width: 100%; justify-content: center;">Open Vault</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- [02 & 03] VIEW: MESSAGES & ROOMS (Integrated Chat Area) -->
+    <section class="view-panel" id="viewChat" style="padding: 0; display: none;">
+      <div style="display: flex; height: 100%;">
+
+        <!-- Secondary Sidebar: Rooms / Direct Messages Switcher -->
+        <aside class="sidebar" id="appSidebar" style="border-right: 1px solid var(--border-color);">
+          <div class="sidebar-tabs">
+            <button class="tab-btn active" id="tabRoomsBtn">
+              <span id="roomsIcon"></span> Rooms (<span id="roomsTabCount">0</span>)
+            </button>
+            <button class="tab-btn" id="tabDmBtn">
+              <span id="usersIcon"></span> Direct (<span id="onlineCount">0</span>)
+            </button>
+          </div>
+
+          <!-- Rooms Content -->
+          <div class="sidebar-content" id="sidebarRoomsContent">
+            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+              <button id="openCreateRoomBtn" class="btn btn-primary btn-sm" style="flex: 1;">
+                <span id="plusIcon"></span> Create Room
+              </button>
+              <button id="openJoinRoomBtn" class="btn btn-ghost btn-sm" style="flex: 1;">
+                <span id="hashIcon"></span> Join Code
+              </button>
+            </div>
+
+            <div class="list-section-title">My Rooms (Enclaves)</div>
+            <div id="myRoomsList"></div>
+
+            <div class="list-section-title" style="margin-top: 1rem;">Public Discovery</div>
+            <div id="publicRoomsList"></div>
+          </div>
+
+          <!-- Direct Messages Content -->
+          <div class="sidebar-content" id="sidebarDmContent" style="display: none;">
+            <div class="list-section-title">
+              <span>Connected Operatives</span>
+              <button id="refreshUsersBtn" class="btn btn-ghost btn-sm" title="Refresh Operatives" style="padding: 2px 6px;">
+                <span id="refreshUsersIcon"></span>
+              </button>
+            </div>
+            <div id="usersList"></div>
+          </div>
+        </aside>
+
+        <!-- Chat Workspace Area -->
+        <section class="chat-area" id="chatArea">
+          <!-- Empty Chat Placeholder -->
+          <div class="empty-chat" id="emptyChatPlaceholder">
+            <div class="empty-chat-icon" id="placeholderGhostIcon"></div>
+            <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.5rem;">
+              SELECT CONVERSATION OR ENCLAVE
+            </h2>
+            <p style="font-size: 0.85rem; line-height: 1.6; color: var(--text-muted); margin-bottom: 1.5rem;">
+              Choose a room or connected operative from the left list to initiate real-time transmissions or file transfers.
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+              <button id="quickJoinRoomBtn" class="btn btn-primary btn-sm">Join Room by Code</button>
+              <button id="quickCreateRoomBtn" class="btn btn-ghost btn-sm">Create New Room</button>
             </div>
           </div>
-          <div class="chat-actions">
-            <button id="viewParticipantsBtn" class="btn btn-ghost btn-sm" style="display: none;" title="View Room Participants">
-              <span id="partIcon"></span> <span id="participantCountBadge">0</span>
-            </button>
-            <button id="leaveRoomBtn" class="btn btn-danger btn-sm" style="display: none;" title="Leave Room">
-              Leave
-            </button>
+
+          <!-- Active Chat Container -->
+          <div id="activeChatContainer" style="display: none; height: 100%; display: flex; flex-direction: column;">
+            <div class="chat-header">
+              <div class="chat-title-group">
+                <div class="avatar" id="activeChatAvatar">?</div>
+                <div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="chat-title" id="activeChatTitle">Chat</span>
+                    <span class="code-pill" id="activeChatCode" style="display: none;"></span>
+                  </div>
+                  <div class="item-sub" id="activeChatSubtitle">Connecting...</div>
+                </div>
+              </div>
+              <div class="chat-actions">
+                <button id="viewParticipantsBtn" class="btn btn-ghost btn-sm" style="display: none;" title="View Room Participants">
+                  <span id="partIcon"></span> <span id="participantCountBadge">0</span>
+                </button>
+                <button id="leaveRoomBtn" class="btn btn-danger btn-sm" style="display: none;" title="Leave Room">
+                  Leave
+                </button>
+              </div>
+            </div>
+
+            <!-- Scrollable Message Stream -->
+            <div class="message-stream" id="messageStream"></div>
+
+            <!-- Live Typing Indicator -->
+            <div class="typing-banner" id="typingBanner" style="display: none;">
+              <span id="typingText"></span>
+            </div>
+
+            <!-- Active Upload Progress Indicator -->
+            <div id="chatUploadProgress" style="display: none; padding: 6px 16px; background: var(--bg-surface); border-top: 1px solid var(--border-color); font-size: 0.75rem; font-family: var(--font-mono); color: var(--neon-cyan);">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span id="chatUploadFilename">Uploading attachment...</span>
+                <span id="chatUploadPercent">0%</span>
+              </div>
+              <div class="transfer-progress-track">
+                <div class="transfer-progress-fill" id="chatUploadFill"></div>
+              </div>
+            </div>
+
+            <!-- Chat Input Bar -->
+            <form class="chat-input-bar" id="chatForm">
+              <input type="file" id="chatFileInput" style="display: none;">
+              <button type="button" class="btn btn-ghost btn-sm" id="chatAttachBtn" title="Attach file to message (drag-and-drop also supported)">
+                <span id="attachIcon"></span>
+              </button>
+              <input type="text" id="chatInput" class="input-field" placeholder="Transmit message (or drop file to send)..." autocomplete="off" maxlength="4096">
+              <button type="submit" class="btn btn-primary" id="sendMessageBtn" title="Transmit">
+                <span id="sendIcon"></span> <span class="hide-mobile">Send</span>
+              </button>
+            </form>
+          </div>
+        </section>
+
+      </div>
+    </section>
+
+    <!-- [04] VIEW: FILE TRANSFERS -->
+    <section class="view-panel" id="viewTransfers">
+      <div class="view-header">
+        <div class="view-title-wrap">
+          <h1 class="view-title"><span id="transfersHeaderIcon"></span> FILE TRANSFER CENTER</h1>
+          <p class="view-subtitle">Monitor real-time uploads, downloads, SHA-256 integrity checks, and transfer speeds</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="clearTransfersBtn" class="btn btn-ghost btn-sm">Clear Completed</button>
+        </div>
+      </div>
+
+      <!-- Active Transfers -->
+      <div class="card-box">
+        <div class="card-box-header">
+          <div class="card-box-title">Active Transmissions & Buffers</div>
+          <span class="code-pill" id="activeTransferCountPill">0 ACTIVE</span>
+        </div>
+        <div id="activeTransfersList" class="transfer-list">
+          <div style="text-align: center; color: var(--text-dim); padding: 20px; font-size: 0.85rem;">
+            No file transfers currently running. Files uploaded in conversations or vaults will track here.
           </div>
         </div>
+      </div>
 
-        <!-- Scrollable Message Stream -->
-        <div class="message-stream" id="messageStream"></div>
-
-        <!-- Live Typing Indicator -->
-        <div class="typing-banner" id="typingBanner" style="display: none;">
-          <span id="typingText"></span>
+      <!-- Completed Transfers History -->
+      <div class="card-box">
+        <div class="card-box-header">
+          <div class="card-box-title">Transfer History & Checksum Verification</div>
+          <span class="code-pill">SHA-256 VERIFIED</span>
         </div>
+        <div id="completedTransfersList" class="transfer-list">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </section>
 
-        <!-- Chat Input Bar -->
-        <form class="chat-input-bar" id="chatForm">
-          <input type="text" id="chatInput" class="input-field" placeholder="Transmit encrypted message..." autocomplete="off" maxlength="4096">
-          <button type="submit" class="btn btn-primary" id="sendMessageBtn" title="Transmit">
-            <span id="sendIcon"></span> <span class="hide-mobile">Send</span>
+    <!-- [05] VIEW: PRIVATE ENCRYPTED VAULT -->
+    <section class="view-panel" id="viewVault">
+      <div class="view-header">
+        <div class="view-title-wrap">
+          <h1 class="view-title"><span id="vaultHeaderIcon"></span> INDIVIDUAL ENCRYPTED VAULT</h1>
+          <p class="view-subtitle">Zero-knowledge client-side AES-256-GCM storage. Host administrator has zero access.</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="lockVaultBtn" class="btn btn-ghost btn-sm" style="display: none;">
+            <span id="vaultLockIcon"></span> Lock Vault
           </button>
+        </div>
+      </div>
+
+      <!-- Guest Lockout Banner (Scenario E) -->
+      <div id="vaultGuestLocked" class="vault-locked-banner" style="display: none;">
+        <div style="font-size: 2.5rem; color: var(--neon-yellow); margin-bottom: 12px;"><span id="vaultGuestLockIcon"></span></div>
+        <h3 style="color: var(--text-main); margin-bottom: 8px;">Private Vaults Require Registered Account</h3>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 20px;">
+          Guest operatives are restricted from individual private vaults to prevent unauthenticated disk consumption. Create a permanent operative account to unlock zero-knowledge encrypted storage.
+        </p>
+        <button id="vaultRegisterBtn" class="btn btn-primary">Register Operative Account</button>
+      </div>
+
+      <!-- Uninitialized Vault Setup Banner -->
+      <div id="vaultUninitialized" class="vault-locked-banner" style="display: none;">
+        <div style="font-size: 2.5rem; color: var(--neon-cyan); margin-bottom: 12px;"><span id="vaultInitIcon"></span></div>
+        <h3 style="color: var(--text-main); margin-bottom: 8px;">Set Up Your Zero-Knowledge Vault</h3>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 20px;">
+          Choose a secure Vault PIN or passphrase. Your files will be encrypted directly in your browser using AES-256-GCM before transmission. The host laptop never receives your PIN or decryption key.
+        </p>
+        <form id="vaultInitForm" style="display: flex; flex-direction: column; gap: 12px; max-width: 320px; margin: 0 auto;">
+          <input type="password" id="vaultInitPin" class="input-field" placeholder="Create Vault PIN / Passphrase (min 6 chars)" required minlength="6">
+          <input type="password" id="vaultInitPinConfirm" class="input-field" placeholder="Confirm Vault PIN" required minlength="6">
+          <button type="submit" class="btn btn-primary" style="justify-content: center;">Initialize Encrypted Vault</button>
         </form>
       </div>
 
+      <!-- Locked Vault PIN Dialog -->
+      <div id="vaultLockedDialog" class="vault-locked-banner" style="display: none;">
+        <div style="font-size: 2.5rem; color: var(--neon-cyan); margin-bottom: 12px;"><span id="vaultPinIcon"></span></div>
+        <h3 style="color: var(--text-main); margin-bottom: 8px;">Vault Is Locked</h3>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 20px;">
+          Enter your Vault PIN or passphrase to derive the AES-256-GCM encryption key locally.
+        </p>
+        <form id="vaultUnlockForm" style="display: flex; gap: 8px; max-width: 340px; margin: 0 auto;">
+          <input type="password" id="vaultUnlockPin" class="input-field" placeholder="Vault PIN / Passphrase" required autofocus>
+          <button type="submit" class="btn btn-primary">Unlock</button>
+        </form>
+      </div>
+
+      <!-- Unlocked Vault Browser Interface -->
+      <div id="vaultUnlockedWorkspace" style="display: none;">
+        <!-- Storage Quota Gauge -->
+        <div class="vault-quota-wrap">
+          <div style="display: flex; justify-content: space-between; font-size: 0.82rem;">
+            <span><strong style="color: var(--text-main);">Storage Quota:</strong> <span id="vaultQuotaUsageText">0 MB / 1024 MB</span></span>
+            <span id="vaultQuotaPercent" style="font-family: var(--font-mono); color: var(--neon-cyan);">0%</span>
+          </div>
+          <div class="vault-quota-bar">
+            <div class="vault-quota-fill" id="vaultQuotaFill"></div>
+          </div>
+        </div>
+
+        <!-- Vault Controls Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+          <div class="vault-breadcrumbs" id="vaultBreadcrumbs">
+            <span class="vault-crumb" data-folder-id="">Root</span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="vaultSearchInput" class="input-field" placeholder="Search encrypted files..." style="width: 180px; padding: 6px 10px; font-size: 0.8rem;">
+            <button id="vaultNewFolderBtn" class="btn btn-ghost btn-sm"><span id="newFolderIcon"></span> New Folder</button>
+            <input type="file" id="vaultUploadFileInput" style="display: none;">
+            <button id="vaultUploadBtn" class="btn btn-primary btn-sm"><span id="vaultUploadIcon"></span> Encrypt & Upload</button>
+          </div>
+        </div>
+
+        <!-- Folder List / Grid -->
+        <div class="vault-grid" id="vaultGrid">
+          <!-- Dynamically populated folders and files -->
+        </div>
+      </div>
     </section>
-  </main>
+
+    <!-- [06] VIEW: NETWORK MEMBERS -->
+    <section class="view-panel" id="viewMembers">
+      <div class="view-header">
+        <div class="view-title-wrap">
+          <h1 class="view-title"><span id="membersHeaderIcon"></span> NETWORK OPERATIVES & GUESTS</h1>
+          <p class="view-subtitle">Active clients and devices connected to this offline-first wireless host</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="refreshMembersBtn" class="btn btn-ghost btn-sm"><span id="refreshMembersIcon"></span> Refresh Directory</button>
+        </div>
+      </div>
+
+      <div class="card-box">
+        <div class="card-box-header">
+          <div class="card-box-title">Connected Operatives & Ephemeral Devices</div>
+          <span class="code-pill" id="totalMembersCountPill">0 NODES</span>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="data-table" id="membersTable">
+            <thead>
+              <tr>
+                <th>Operative</th>
+                <th>Identity Role</th>
+                <th>Status</th>
+                <th>Enclave Membership</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="membersTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- [07] VIEW: ACTIVITY LOG -->
+    <section class="view-panel" id="viewActivity">
+      <div class="view-header">
+        <div class="view-title-wrap">
+          <h1 class="view-title"><span id="activityHeaderIcon"></span> SYSTEM EVENT AUDIT LOG</h1>
+          <p class="view-subtitle">Chronological record of local connections, file transfers, and security events</p>
+        </div>
+        <button id="clearActivityLogBtn" class="btn btn-ghost btn-sm">Clear Local Display</button>
+      </div>
+
+      <div class="card-box">
+        <div id="activityLogStream" style="display: flex; flex-direction: column; gap: 8px; font-family: var(--font-mono); font-size: 0.8rem;">
+          <div style="color: var(--text-dim); text-align: center; padding: 20px;">System listening for local network events...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- [08] VIEW: SETTINGS -->
+    <section class="view-panel" id="viewSettings">
+      <div class="view-header">
+        <div class="view-title-wrap">
+          <h1 class="view-title"><span id="settingsHeaderIcon"></span> OPERATIVE SETTINGS & CREDENTIALS</h1>
+          <p class="view-subtitle">Configure your profile, security credentials, and guest device identifiers</p>
+        </div>
+      </div>
+
+      <!-- Account Profile Settings -->
+      <div class="card-box" id="settingsProfileBox">
+        <div class="card-box-header">
+          <div class="card-box-title">Operative Identity</div>
+        </div>
+        <form id="settingsProfileForm" style="max-width: 480px; display: flex; flex-direction: column; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label">Handle / Username</label>
+            <input type="text" id="settingsUsername" class="input-field" disabled style="opacity: 0.6;">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Display Name</label>
+            <input type="text" id="settingsDisplayName" class="input-field" maxlength="100">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Field Notes / Bio</label>
+            <textarea id="settingsBio" class="input-field" rows="3" maxlength="500"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="width: fit-content;">Save Changes</button>
+        </form>
+      </div>
+
+      <!-- Guest Device Management -->
+      <div class="card-box">
+        <div class="card-box-header">
+          <div class="card-box-title">Browser Device Identity & Credentials</div>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 14px;">
+          Ephemeral guests store a cryptographically random device credential in browser local storage (<code style="color: var(--neon-cyan);">gdev_...</code>) to restore identity across reconnects. You can purge this device credential at any time.
+        </p>
+        <div style="display: flex; gap: 10px;">
+          <button id="resetGuestDeviceBtn" class="btn btn-danger btn-sm">Purge Guest Device Credential</button>
+          <button id="clearLocalStorageBtn" class="btn btn-ghost btn-sm">Clear All Local Storage</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- [09] VIEW: HOST ADMINISTRATION (Visible only to ROLE_ADMIN) -->
+    <section class="view-panel" id="viewAdmin">
+      <div class="view-header">
+        <div class="view-title-wrap">
+          <h1 class="view-title"><span id="adminHeaderIcon"></span> HOST PLATFORM ADMINISTRATION</h1>
+          <p class="view-subtitle">Host laptop central control center for storage quotas, network interfaces, and guest management</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <a href="/admin.html" class="btn btn-ghost btn-sm" target="_blank">Open Full Admin Console ↗</a>
+        </div>
+      </div>
+
+      <!-- Admin Telemetry -->
+      <div class="metric-grid">
+        <div class="metric-card accent-cyan">
+          <span class="metric-label">Registered Operatives</span>
+          <span class="metric-val" id="adminTotalUsers">0</span>
+        </div>
+        <div class="metric-card accent-yellow">
+          <span class="metric-label">Active Guests</span>
+          <span class="metric-val" id="adminTotalGuests">0</span>
+        </div>
+        <div class="metric-card accent-green">
+          <span class="metric-label">Active Rooms</span>
+          <span class="metric-val" id="adminTotalRooms">0</span>
+        </div>
+        <div class="metric-card accent-blue">
+          <span class="metric-label">Host Storage Path</span>
+          <span class="metric-val" style="font-size: 0.95rem;" id="adminStoragePath">data/</span>
+        </div>
+      </div>
+
+      <!-- Admin Actions Card -->
+      <div class="card-box">
+        <div class="card-box-header">
+          <div class="card-box-title">Host Operations & Storage Maintenance</div>
+        </div>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <button id="adminCleanupExpiredBtn" class="btn btn-primary btn-sm">Purge Expired Guests & Temporary Files</button>
+          <button id="adminBroadcastNoticeBtn" class="btn btn-ghost btn-sm">Broadcast Host System Notice</button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- =========================================================================
+       MODALS & DIALOGS
+       ========================================================================= -->
+
+  <!-- Quick Guest Onboarding Modal -->
+  <div class="modal-overlay" id="guestJoinModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-title">Join GhostNet as Ephemeral Guest</span>
+        <button class="btn btn-ghost btn-sm" id="closeGuestModalBtn"><span id="closeGuestIcon"></span></button>
+      </div>
+      <form class="modal-body" id="guestJoinForm">
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">
+          Enter a temporary display handle. No account or password required. You can participate in conversations and exchange files immediately.
+        </p>
+        <div class="form-group">
+          <label class="form-label">Temporary Display Name</label>
+          <input type="text" id="guestDisplayNameInput" class="input-field" placeholder="e.g. Nomad, Scout_9, FieldUnit" required minlength="2" maxlength="50" autofocus>
+        </div>
+        <button type="submit" class="btn btn-primary" style="justify-content: center; margin-top: 8px;">
+          Enter Private Network
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Returning Guest Recognition Dialog -->
+  <div class="modal-overlay" id="returningGuestModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-title">Returning Guest Device Detected</span>
+        <button class="btn btn-ghost btn-sm" id="closeReturningGuestBtn"><span id="closeReturningIcon"></span></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 16px;">
+          GhostNet recognized an active guest device credential on this browser. Would you like to restore your previous temporary identity or start as a new guest?
+        </p>
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+          <button type="button" class="btn btn-ghost" id="newGuestInsteadBtn">Start New Guest</button>
+          <button type="button" class="btn btn-primary" id="restoreGuestConfirmBtn">Restore Previous Identity</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Auth Modal (Login & Registration) -->
   <div class="modal-overlay" id="authModal">
@@ -164,7 +664,6 @@
         <div class="form-group">
           <label class="form-label">Username</label>
           <input type="text" id="authUsername" class="input-field" placeholder="operative_handle" required minlength="3" maxlength="30">
-          <span class="form-help">3-30 alphanumeric characters or underscores</span>
         </div>
         <div class="form-group" id="displayNameGroup" style="display: none;">
           <label class="form-label">Display Name (Optional)</label>
@@ -173,16 +672,14 @@
         <div class="form-group">
           <label class="form-label">Password</label>
           <input type="password" id="authPassword" class="input-field" placeholder="••••••••" required minlength="6">
-          <span class="form-help">Minimum 6 characters. Hashed securely with BCrypt.</span>
         </div>
         <button type="submit" class="btn btn-primary" id="authSubmitBtn" style="margin-top: 0.5rem; justify-content: center;">
           Authenticate
         </button>
 
         <div style="margin-top: 1rem; padding: 10px; border-radius: 6px; background: rgba(0, 240, 255, 0.05); border: 1px dashed rgba(0, 240, 255, 0.25); font-size: 0.78rem; color: var(--text-dim); line-height: 1.5;">
-          <strong style="color: var(--neon-cyan);">Host Administrator Access:</strong><br>
-          Default Host Admin: <code style="color: #fff; font-weight: bold;">admin</code> / <code style="color: #fff; font-weight: bold;">ghostadmin</code><br>
-          <span style="font-size: 0.73rem; color: var(--text-muted);">(Host Admin has full dashboard access at /admin.html)</span>
+          <strong style="color: var(--neon-cyan);">Host Administrator Credentials:</strong><br>
+          Username: <code style="color: #fff; font-weight: bold;">admin</code> &nbsp;|&nbsp; Password: <code style="color: #fff; font-weight: bold;">ghostadmin</code>
         </div>
       </form>
     </div>
@@ -198,23 +695,15 @@
       <form class="modal-body" id="createRoomForm">
         <div class="form-group">
           <label class="form-label">Room Name</label>
-          <input type="text" id="roomNameInput" class="input-field" placeholder="e.g. Tactical Ops" required minlength="2" maxlength="100">
+          <input type="text" id="roomNameInput" class="input-field" placeholder="e.g. Field Tactics" required minlength="2" maxlength="100">
         </div>
         <div class="form-group">
           <label class="form-label">Description (Optional)</label>
-          <input type="text" id="roomDescInput" class="input-field" placeholder="Brief objective of this room" maxlength="500">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Capacity Limit</label>
-          <input type="number" id="roomCapacityInput" class="input-field" value="50" min="2" max="500">
+          <input type="text" id="roomDescInput" class="input-field" placeholder="Objective or topic of this room" maxlength="500">
         </div>
         <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
           <input type="checkbox" id="roomPrivateCheckbox">
-          <label for="roomPrivateCheckbox" class="form-label" style="margin-bottom: 0; cursor: pointer;">Private Room (Requires password or code to join)</label>
-        </div>
-        <div class="form-group" id="roomPasswordGroup" style="display: none;">
-          <label class="form-label">Room Password (Optional)</label>
-          <input type="password" id="roomPasswordInput" class="input-field" placeholder="Leave empty for code-only entry">
+          <label for="roomPrivateCheckbox" class="form-label" style="margin-bottom: 0; cursor: pointer;">Private Room</label>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" id="cancelCreateRoomBtn">Cancel</button>
@@ -234,12 +723,7 @@
       <form class="modal-body" id="joinRoomForm">
         <div class="form-group">
           <label class="form-label">Unique Room Code</label>
-          <input type="text" id="joinRoomCodeInput" class="input-field" placeholder="e.g. GN-7K4X" required style="font-family: var(--font-mono); text-transform: uppercase;">
-          <span class="form-help">Enter the 6-8 character room code shared by the room owner</span>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Password (If room is password-protected)</label>
-          <input type="password" id="joinRoomPasswordInput" class="input-field" placeholder="Optional">
+          <input type="text" id="joinRoomCodeInput" class="input-field" placeholder="e.g. GN-MAIN" required style="font-family: var(--font-mono); text-transform: uppercase;">
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" id="cancelJoinRoomBtn">Cancel</button>
@@ -249,50 +733,23 @@
     </div>
   </div>
 
-  <!-- User Profile Modal -->
-  <div class="modal-overlay" id="profileModal">
+  <!-- New Vault Folder Modal -->
+  <div class="modal-overlay" id="newFolderModal">
     <div class="modal-card">
       <div class="modal-header">
-        <span class="modal-title">Operative Profile</span>
-        <button class="btn btn-ghost btn-sm" id="closeProfileModalBtn"><span id="closeProfileIcon"></span></button>
+        <span class="modal-title">Create Encrypted Vault Folder</span>
+        <button class="btn btn-ghost btn-sm" id="closeNewFolderModalBtn"><span id="closeNewFolderIcon"></span></button>
       </div>
-      <form class="modal-body" id="profileForm">
+      <form class="modal-body" id="newFolderForm">
         <div class="form-group">
-          <label class="form-label">Username</label>
-          <input type="text" id="profileUsername" class="input-field" disabled style="opacity: 0.6;">
+          <label class="form-label">Folder Name</label>
+          <input type="text" id="newFolderNameInput" class="input-field" placeholder="e.g. Operation Reports" required maxlength="100" autofocus>
         </div>
-        <div class="form-group">
-          <label class="form-label">Role</label>
-          <input type="text" id="profileRole" class="input-field" disabled style="opacity: 0.6;">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Display Name</label>
-          <input type="text" id="profileDisplayName" class="input-field" maxlength="100">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Bio / Field Notes</label>
-          <textarea id="profileBio" class="input-field" rows="3" maxlength="500"></textarea>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
-          <button type="button" class="btn btn-danger btn-sm" id="logoutBtn">
-            <span id="logoutIcon"></span> Disconnect / Logout
-          </button>
-          <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="cancelNewFolderBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Folder</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- Room Participants Modal -->
-  <div class="modal-overlay" id="participantsModal">
-    <div class="modal-card">
-      <div class="modal-header">
-        <span class="modal-title">Room Participants</span>
-        <button class="btn btn-ghost btn-sm" id="closeParticipantsModalBtn"><span id="closePartIcon"></span></button>
-      </div>
-      <div class="modal-body">
-        <div id="participantsList" style="display: flex; flex-direction: column; gap: 8px;"></div>
-      </div>
     </div>
   </div>
 
@@ -316,10 +773,39 @@
     </div>
   </div>
 
-  <!-- Toast Notification Container -->
+  <!-- Media Preview Modal -->
+  <div class="modal-overlay" id="mediaPreviewModal">
+    <div class="modal-card" style="max-width: 600px;">
+      <div class="modal-header">
+        <span class="modal-title" id="previewModalTitle">File Preview</span>
+        <button class="btn btn-ghost btn-sm" id="closeMediaPreviewBtn"><span id="closeMediaIcon"></span></button>
+      </div>
+      <div class="modal-body" id="previewModalBody" style="text-align: center;">
+        <!-- Dynamically injected preview element -->
+      </div>
+      <div class="modal-footer">
+        <a id="previewDownloadLink" class="btn btn-primary btn-sm" download>Download File</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Room Participants Modal -->
+  <div class="modal-overlay" id="participantsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-title">Room Participants</span>
+        <button class="btn btn-ghost btn-sm" id="closeParticipantsModalBtn"><span id="closePartIcon"></span></button>
+      </div>
+      <div class="modal-body">
+        <div id="participantsList" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <!-- Core Scripts (No remote CDNs) -->
+  <!-- Scripts (100% Offline, Native WebCrypto, Zero CDNs) -->
   <script src="/js/ghostnet-icons.js"></script>
   <script src="/js/ghostnet-app.js"></script>
 </body>

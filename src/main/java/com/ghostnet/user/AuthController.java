@@ -1,5 +1,9 @@
 package com.ghostnet.user;
 
+import com.ghostnet.guest.GuestAuthResponse;
+import com.ghostnet.guest.GuestJoinRequest;
+import com.ghostnet.guest.GuestRestoreRequest;
+import com.ghostnet.guest.GuestService;
 import com.ghostnet.security.RequireAuth;
 import com.ghostnet.security.SecurityContext;
 import jakarta.servlet.http.Cookie;
@@ -11,13 +15,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Authentication REST controller for registration, login, logout and profile check.
+ * Authentication REST controller for registration, login, logout, profile check, and guest access.
  */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
     private final UserService userService;
+    private final GuestService guestService;
 
     @Value("${ghostnet.security.cookie-name:GHOSTNET_SESSION}")
     private String cookieName;
@@ -25,8 +30,9 @@ public class AuthController {
     @Value("${ghostnet.security.session-duration-hours:72}")
     private int sessionDurationHours;
 
-    public AuthController(UserService userService) {
+    public AuthController(UserService userService, GuestService guestService) {
         this.userService = userService;
+        this.guestService = guestService;
     }
 
     @PostMapping("/register")
@@ -49,6 +55,36 @@ public class AuthController {
         AuthResponse response = userService.login(request, clientIp, userAgent);
         setSessionCookie(httpResponse, response.token());
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/guest")
+    public ResponseEntity<GuestAuthResponse> joinAsGuest(@Valid @RequestBody GuestJoinRequest request,
+                                                         HttpServletRequest httpRequest,
+                                                         HttpServletResponse httpResponse) {
+        String clientIp = getClientIp(httpRequest);
+        String userAgent = httpRequest.getHeader("User-Agent");
+        GuestAuthResponse response = guestService.joinAsGuest(request, clientIp, userAgent);
+        setSessionCookie(httpResponse, response.token());
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/guest/restore")
+    public ResponseEntity<GuestAuthResponse> restoreGuest(@Valid @RequestBody GuestRestoreRequest request,
+                                                          HttpServletRequest httpRequest,
+                                                          HttpServletResponse httpResponse) {
+        String clientIp = getClientIp(httpRequest);
+        String userAgent = httpRequest.getHeader("User-Agent");
+        GuestAuthResponse response = guestService.restoreGuest(request, clientIp, userAgent);
+        setSessionCookie(httpResponse, response.token());
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/guest/reset")
+    public ResponseEntity<Void> resetGuest(@Valid @RequestBody GuestRestoreRequest request,
+                                           HttpServletResponse httpResponse) {
+        guestService.resetGuest(request.deviceCredential());
+        clearSessionCookie(httpResponse);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/logout")

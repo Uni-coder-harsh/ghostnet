@@ -14,6 +14,10 @@ public record UserDto(
         boolean online,
         Instant createdAt
 ) {
+    public boolean isGuest() {
+        return role == UserRole.ROLE_GUEST;
+    }
+
     public static UserDto from(UserRecord user, boolean online) {
         return new UserDto(
                 user.id(),

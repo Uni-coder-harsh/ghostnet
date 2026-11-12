@@ -69,7 +69,7 @@ public class AdminBootstrapService {
     @Order(10)
     public void bootstrap() {
         UserRecord adminUser = ensureAdminUser();
-        RoomRecord mainRoom = ensureDefaultRoom(adminUser.id());
+        RoomRecord mainRoom = ensureDefaultRoom();
         enrollAllUsersInDefaultRoom(mainRoom.id(), adminUser.id());
         printStartupBanner();
     }
@@ -115,12 +115,13 @@ public class AdminBootstrapService {
         return adminUser;
     }
 
-    private RoomRecord ensureDefaultRoom(String adminUserId) {
+    public RoomRecord ensureDefaultRoom() {
         Optional<RoomRecord> existingRoom = roomRepository.findByCode(DEFAULT_ROOM_CODE);
         if (existingRoom.isPresent()) {
             return existingRoom.get();
         }
 
+        UserRecord adminUser = ensureAdminUser();
         String roomId = UUID.randomUUID().toString();
         Instant now = Instant.now();
 
@@ -132,14 +133,14 @@ public class AdminBootstrapService {
                 false,
                 null,
                 100,
-                adminUserId,
+                adminUser.id(),
                 now
         );
 
         roomRepository.save(mainRoom);
         roomMembershipRepository.addMember(new RoomMemberRecord(
                 roomId,
-                adminUserId,
+                adminUser.id(),
                 RoomMemberRole.OWNER,
                 now
         ));

@@ -24,4 +24,16 @@ public record UserRecord(
         if (createdAt == null) createdAt = Instant.now();
         if (updatedAt == null) updatedAt = createdAt;
     }
+
+    public boolean isGuest() {
+        return role == UserRole.ROLE_GUEST;
+    }
+
+    public boolean isAdmin() {
+        return role == UserRole.ROLE_ADMIN;
+    }
+
+    public boolean isRegistered() {
+        return role == UserRole.ROLE_USER || role == UserRole.ROLE_ADMIN;
+    }
 }

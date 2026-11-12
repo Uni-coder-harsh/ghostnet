@@ -1,5 +1,7 @@
 package com.ghostnet.persistence;
 
+import com.ghostnet.files.AttachmentService;
+import com.ghostnet.guest.GuestService;
 import com.ghostnet.messaging.DirectMessageRepository;
 import com.ghostnet.messaging.RoomMessageRepository;
 import org.slf4j.Logger;
@@ -12,8 +14,8 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
 /**
- * Message retention service responsible for executing configurable retention policies
- * and authorized deletion of message histories without logging message contents (Req 143, 193, 194, 197).
+ * Message & attachment retention service responsible for executing configurable retention policies,
+ * purging expired temporary guest files and identities (Req 143, 193, 194, 197).
  */
 @Service
 public class RetentionService {
@@ -22,6 +24,8 @@ public class RetentionService {
 
     private final DirectMessageRepository directMessageRepository;
     private final RoomMessageRepository roomMessageRepository;
+    private final AttachmentService attachmentService;
+    private final GuestService guestService;
 
     @Value("${ghostnet.retention.enabled:true}")
     private boolean retentionEnabled;
@@ -30,20 +34,27 @@ public class RetentionService {
     private int retentionDays;
 
     public RetentionService(DirectMessageRepository directMessageRepository,
-                            RoomMessageRepository roomMessageRepository) {
+                            RoomMessageRepository roomMessageRepository,
+                            AttachmentService attachmentService,
+                            GuestService guestService) {
         this.directMessageRepository = directMessageRepository;
         this.roomMessageRepository = roomMessageRepository;
+        this.attachmentService = attachmentService;
+        this.guestService = guestService;
     }
 
     /**
-     * Executes retention purge according to configured days.
-     * Scheduled to run once per day (or on manual trigger).
+     * Executes retention purge according to configured policies.
+     * Scheduled to run periodically (or on manual trigger).
      */
-    @Scheduled(cron = "0 0 3 * * ?") // Daily at 3 AM
+    @Scheduled(cron = "0 0 */6 * * ?") // Every 6 hours
     public RetentionReport cleanupRetention() {
+        int attachmentsCleaned = attachmentService.cleanupExpiredAttachments();
+        int guestsCleaned = guestService.cleanupExpiredGuests();
+
         if (!retentionEnabled || retentionDays <= 0) {
             log.info("Message retention policy is disabled or set to keep indefinitely (retentionDays={})", retentionDays);
-            return new RetentionReport(0, 0, Instant.now());
+            return new RetentionReport(0, 0, attachmentsCleaned, guestsCleaned, Instant.now());
         }
 
         Instant cutoff = Instant.now().minus(retentionDays, ChronoUnit.DAYS);
@@ -52,8 +63,9 @@ public class RetentionService {
         int directDeleted = directMessageRepository.deleteOlderThan(cutoff);
         int roomDeleted = roomMessageRepository.deleteOlderThan(cutoff);
 
-        log.info("Retention cleanup completed: deleted {} direct messages and {} room messages.", directDeleted, roomDeleted);
-        return new RetentionReport(directDeleted, roomDeleted, cutoff);
+        log.info("Retention cleanup completed: deleted {} direct messages, {} room messages, {} expired attachments, {} expired guests.",
+                directDeleted, roomDeleted, attachmentsCleaned, guestsCleaned);
+        return new RetentionReport(directDeleted, roomDeleted, attachmentsCleaned, guestsCleaned, cutoff);
     }
 
     /**
@@ -72,5 +84,11 @@ public class RetentionService {
         directMessageRepository.deleteConversation(user1, user2);
     }
 
-    public record RetentionReport(int directMessagesPurged, int roomMessagesPurged, Instant cutoff) {}
+    public record RetentionReport(
+            int directMessagesPurged,
+            int roomMessagesPurged,
+            int attachmentsPurged,
+            int guestsPurged,
+            Instant cutoff
+    ) {}
 }

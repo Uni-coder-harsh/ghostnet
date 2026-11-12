@@ -5,6 +5,11 @@ spring:
   threads:
     virtual:
       enabled: true
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 105MB
+      file-size-threshold: 2MB
   datasource:
     url: jdbc:sqlite:data/ghostnet_test.db
     driver-class-name: org.sqlite.JDBC
@@ -20,11 +25,17 @@ ghostnet:
     path: data/ghostnet_test.db
     wal-mode: true
     busy-timeout-ms: 5000
+  storage:
+    base-path: data/test-storage
+    max-file-size-mb: 100
+    user-vault-quota-mb: 1024
+    guest-temp-quota-mb: 256
+    guest-expiration-hours: 24
   security:
     cookie-name: "GHOSTNET_SESSION"
     session-duration-hours: 72
     rate-limit-per-minute: 500
-    max-message-length: 4096
+    max-message-length: 8192
   retention:
     enabled: true
     message-retention-days: 30

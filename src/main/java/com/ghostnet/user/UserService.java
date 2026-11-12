@@ -117,21 +117,35 @@ public class UserService {
 
     private void autoEnrollInDefaultRoom(String userId) {
         try {
-            Optional<RoomRecord> defaultRoom = roomRepository.findByCode("GN-MAIN");
-            if (defaultRoom.isPresent()) {
-                String roomId = defaultRoom.get().id();
-                if (!roomMembershipRepository.isMember(roomId, userId)) {
-                    roomMembershipRepository.addMember(new RoomMemberRecord(
-                            roomId,
-                            userId,
-                            RoomMemberRole.MEMBER,
-                            Instant.now()
-                    ));
-                    log.info("Auto-enrolled user '{}' into #GN-MAIN", userId);
-                }
+            RoomRecord defaultRoom = roomRepository.findByCode("GN-MAIN")
+                    .orElseGet(() -> {
+                        String rId = UUID.randomUUID().toString();
+                        RoomRecord r = new RoomRecord(
+                                rId,
+                                "GN-MAIN",
+                                "General Mesh",
+                                "Public broadcast enclave for all connected GhostNet operatives",
+                                false,
+                                null,
+                                100,
+                                userId,
+                                Instant.now()
+                        );
+                        roomRepository.save(r);
+                        return r;
+                    });
+            String roomId = defaultRoom.id();
+            if (!roomMembershipRepository.isMember(roomId, userId)) {
+                roomMembershipRepository.addMember(new RoomMemberRecord(
+                        roomId,
+                        userId,
+                        RoomMemberRole.MEMBER,
+                        Instant.now()
+                ));
+                log.info("Auto-enrolled user '{}' into #GN-MAIN", userId);
             }
         } catch (Exception e) {
-            log.debug("Could not auto-enroll user into default room: {}", e.getMessage());
+            log.warn("Could not auto-enroll user into default room: {}", e.getMessage());
         }
     }
 

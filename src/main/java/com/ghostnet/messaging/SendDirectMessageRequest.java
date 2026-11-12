@@ -14,6 +14,11 @@ public record SendDirectMessageRequest(
         @Size(max = 4096, message = "Message content cannot exceed 4096 bytes")
         String content,
 
-        String clientMessageId
+        String clientMessageId,
+
+        String attachmentId
 ) {
+    public SendDirectMessageRequest(String recipientId, String content, String clientMessageId) {
+        this(recipientId, content, clientMessageId, null);
+    }
 }

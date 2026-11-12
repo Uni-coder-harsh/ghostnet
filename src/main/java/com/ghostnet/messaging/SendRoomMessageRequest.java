@@ -14,6 +14,11 @@ public record SendRoomMessageRequest(
         @Size(max = 4096, message = "Message content cannot exceed 4096 bytes")
         String content,
 
-        String clientMessageId
+        String clientMessageId,
+
+        String attachmentId
 ) {
+    public SendRoomMessageRequest(String roomId, String content, String clientMessageId) {
+        this(roomId, content, clientMessageId, null);
+    }
 }

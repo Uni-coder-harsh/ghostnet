@@ -1,5 +1,7 @@
 package com.ghostnet.messaging;
 
+import com.ghostnet.files.AttachmentDto;
+
 import java.time.Instant;
 
 /**
@@ -11,8 +13,14 @@ public record RoomMessageDto(
         String senderId,
         String senderDisplayName,
         String content,
+        AttachmentDto attachment,
         Instant createdAt
 ) {
+    public RoomMessageDto(String id, String roomId, String senderId, String senderDisplayName,
+                          String content, Instant createdAt) {
+        this(id, roomId, senderId, senderDisplayName, content, null, createdAt);
+    }
+
     public static RoomMessageDto from(RoomMessageRecord record) {
         return new RoomMessageDto(
                 record.id(),
@@ -20,7 +28,12 @@ public record RoomMessageDto(
                 record.senderId(),
                 record.senderDisplayName(),
                 record.content(),
+                null,
                 record.createdAt()
         );
+    }
+
+    public RoomMessageDto withAttachment(AttachmentDto attachment) {
+        return new RoomMessageDto(id, roomId, senderId, senderDisplayName, content, attachment, createdAt);
     }
 }

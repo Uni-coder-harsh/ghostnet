@@ -2,6 +2,9 @@ package com.ghostnet.messaging;
 
 import com.ghostnet.common.ResourceNotFoundException;
 import com.ghostnet.common.ValidationException;
+import com.ghostnet.files.AttachmentDto;
+import com.ghostnet.files.ChatAttachmentRecord;
+import com.ghostnet.files.ChatAttachmentRepository;
 import com.ghostnet.room.RoomMemberRecord;
 import com.ghostnet.room.RoomMembershipRepository;
 import com.ghostnet.room.RoomRepository;
@@ -31,6 +34,7 @@ public class MessagingService {
 
     private final DirectMessageRepository directMessageRepository;
     private final RoomMessageRepository roomMessageRepository;
+    private final ChatAttachmentRepository chatAttachmentRepository;
     private final UserRepository userRepository;
     private final RoomRepository roomRepository;
     private final RoomMembershipRepository roomMembershipRepository;
@@ -43,6 +47,7 @@ public class MessagingService {
 
     public MessagingService(DirectMessageRepository directMessageRepository,
                             RoomMessageRepository roomMessageRepository,
+                            ChatAttachmentRepository chatAttachmentRepository,
                             UserRepository userRepository,
                             RoomRepository roomRepository,
                             RoomMembershipRepository roomMembershipRepository,
@@ -50,6 +55,7 @@ public class MessagingService {
                             PresenceService presenceService) {
         this.directMessageRepository = directMessageRepository;
         this.roomMessageRepository = roomMessageRepository;
+        this.chatAttachmentRepository = chatAttachmentRepository;
         this.userRepository = userRepository;
         this.roomRepository = roomRepository;
         this.roomMembershipRepository = roomMembershipRepository;
@@ -100,7 +106,16 @@ public class MessagingService {
         // Requirement 149 & 197: Do NOT log message content!
         log.info("Direct message delivered (id: {}, from: {}, to: {}, status: {})", messageId, senderUserId, recipientId, initialStatus);
 
-        DirectMessageDto dto = DirectMessageDto.from(record, sender.displayName());
+        AttachmentDto attachmentDto = null;
+        if (request.attachmentId() != null && !request.attachmentId().isBlank()) {
+            chatAttachmentRepository.linkToMessage(request.attachmentId(), messageId);
+            Optional<ChatAttachmentRecord> attOpt = chatAttachmentRepository.findById(request.attachmentId());
+            if (attOpt.isPresent()) {
+                attachmentDto = AttachmentDto.from(attOpt.get());
+            }
+        }
+
+        DirectMessageDto dto = DirectMessageDto.from(record, sender.displayName()).withAttachment(attachmentDto);
 
         if (request.clientMessageId() != null && !request.clientMessageId().isBlank()) {
             String cacheKey = senderUserId + ":" + request.clientMessageId().trim();
@@ -153,8 +168,24 @@ public class MessagingService {
         );
 
         return records.stream()
-                .map(r -> DirectMessageDto.from(r, nameCache.getOrDefault(r.senderId(), "Unknown")))
+                .map(r -> {
+                    DirectMessageDto dto = DirectMessageDto.from(r, nameCache.getOrDefault(r.senderId(), "Unknown"));
+                    List<ChatAttachmentRecord> atts = chatAttachmentRepository.findByMessageId(r.id());
+                    if (!atts.isEmpty()) {
+                        dto = dto.withAttachment(AttachmentDto.from(atts.get(0)));
+                    }
+                    return dto;
+                })
                 .toList();
+    }
+
+    private String resolveRoomId(String idOrCode) {
+        if (idOrCode == null || idOrCode.isBlank()) return idOrCode;
+        Optional<com.ghostnet.room.RoomRecord> byId = roomRepository.findById(idOrCode);
+        if (byId.isPresent()) return byId.get().id();
+        Optional<com.ghostnet.room.RoomRecord> byCode = roomRepository.findByCode(idOrCode.toUpperCase());
+        if (byCode.isPresent()) return byCode.get().id();
+        return idOrCode;
     }
 
     /**
@@ -162,7 +193,7 @@ public class MessagingService {
      */
     @Transactional
     public RoomMessageDto sendRoomMessage(String senderUserId, SendRoomMessageRequest request) {
-        String roomId = request.roomId();
+        String roomId = resolveRoomId(request.roomId());
 
         if (!roomRepository.findById(roomId).isPresent()) {
             throw new ResourceNotFoundException("Room not found");
@@ -200,7 +231,16 @@ public class MessagingService {
         roomMessageRepository.save(record);
         log.info("Room message posted (id: {}, room: {}, sender: {})", messageId, roomId, senderUserId);
 
-        RoomMessageDto dto = RoomMessageDto.from(record);
+        AttachmentDto attachmentDto = null;
+        if (request.attachmentId() != null && !request.attachmentId().isBlank()) {
+            chatAttachmentRepository.linkToMessage(request.attachmentId(), messageId);
+            Optional<ChatAttachmentRecord> attOpt = chatAttachmentRepository.findById(request.attachmentId());
+            if (attOpt.isPresent()) {
+                attachmentDto = AttachmentDto.from(attOpt.get());
+            }
+        }
+
+        RoomMessageDto dto = RoomMessageDto.from(record).withAttachment(attachmentDto);
 
         if (request.clientMessageId() != null && !request.clientMessageId().isBlank()) {
             String cacheKey = senderUserId + ":" + request.clientMessageId().trim();
@@ -221,14 +261,22 @@ public class MessagingService {
      * Retrieves paginated room message history, ensuring only room members can view (Req 165, 166, 171).
      */
     public List<RoomMessageDto> getRoomMessageHistory(String currentUserId, String roomId, int limit, int offset) {
-        if (!roomMembershipRepository.isMember(roomId, currentUserId)) {
+        String effectiveRoomId = resolveRoomId(roomId);
+        if (!roomMembershipRepository.isMember(effectiveRoomId, currentUserId)) {
             throw new UnauthorizedException("Only room participants can access room history");
         }
 
         int safeLimit = Math.min(Math.max(limit, 1), 100);
         int safeOffset = Math.max(offset, 0);
 
-        List<RoomMessageRecord> records = roomMessageRepository.findHistoryByRoomId(roomId, safeLimit, safeOffset);
-        return records.stream().map(RoomMessageDto::from).toList();
+        List<RoomMessageRecord> records = roomMessageRepository.findHistoryByRoomId(effectiveRoomId, safeLimit, safeOffset);
+        return records.stream().map(r -> {
+            RoomMessageDto dto = RoomMessageDto.from(r);
+            List<ChatAttachmentRecord> atts = chatAttachmentRepository.findByMessageId(r.id());
+            if (!atts.isEmpty()) {
+                dto = dto.withAttachment(AttachmentDto.from(atts.get(0)));
+            }
+            return dto;
+        }).toList();
     }
 }

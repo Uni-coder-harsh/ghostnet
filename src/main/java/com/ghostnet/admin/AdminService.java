@@ -1,5 +1,7 @@
 package com.ghostnet.admin;
 
+import com.ghostnet.guest.GuestIdentityRecord;
+import com.ghostnet.guest.GuestService;
 import com.ghostnet.messaging.DirectMessageRepository;
 import com.ghostnet.messaging.RoomMessageRepository;
 import com.ghostnet.persistence.DatabaseBackupService;
@@ -11,6 +13,7 @@ import com.ghostnet.session.AuthSessionService;
 import com.ghostnet.session.SessionRecord;
 import com.ghostnet.user.UserRepository;
 import com.ghostnet.user.UserRecord;
+import com.ghostnet.user.UserRole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
@@ -23,7 +26,7 @@ import java.util.List;
 
 /**
  * Administrative operations coordinator for host management,
- * moderation, sessions, snapshots, and graceful shutdown (Req 246-261).
+ * moderation, sessions, guest controls, snapshots, and graceful shutdown (Req 246-261).
  */
 @Service
 public class AdminService {
@@ -32,6 +35,7 @@ public class AdminService {
 
     private final AuthSessionService authSessionService;
     private final UserRepository userRepository;
+    private final GuestService guestService;
     private final RoomRepository roomRepository;
     private final RoomMembershipRepository roomMembershipRepository;
     private final RoomService roomService;
@@ -41,6 +45,7 @@ public class AdminService {
 
     public AdminService(AuthSessionService authSessionService,
                         UserRepository userRepository,
+                        GuestService guestService,
                         RoomRepository roomRepository,
                         RoomMembershipRepository roomMembershipRepository,
                         RoomService roomService,
@@ -49,6 +54,7 @@ public class AdminService {
                         ApplicationContext applicationContext) {
         this.authSessionService = authSessionService;
         this.userRepository = userRepository;
+        this.guestService = guestService;
         this.roomRepository = roomRepository;
         this.roomMembershipRepository = roomMembershipRepository;
         this.roomService = roomService;
@@ -63,16 +69,20 @@ public class AdminService {
         for (SessionRecord s : sessions) {
             String username = "Unknown";
             String displayName = "Unknown";
+            UserRole role = UserRole.ROLE_USER;
             var userOpt = userRepository.findById(s.userId());
             if (userOpt.isPresent()) {
                 username = userOpt.get().username();
                 displayName = userOpt.get().displayName();
+                role = userOpt.get().role();
             }
             result.add(new AdminSessionDto(
                     s.token(),
                     s.userId(),
                     username,
                     displayName,
+                    role,
+                    role == UserRole.ROLE_GUEST,
                     s.clientIp(),
                     s.userAgent(),
                     s.createdAt(),
@@ -80,6 +90,14 @@ public class AdminService {
             ));
         }
         return result;
+    }
+
+    public List<GuestIdentityRecord> getActiveGuests() {
+        return guestService.getActiveGuests();
+    }
+
+    public void revokeGuest(String guestId) {
+        guestService.revokeGuestById(guestId);
     }
 
     public void revokeSession(String token) {
@@ -95,6 +113,7 @@ public class AdminService {
     }
 
     public RetentionService.RetentionReport runRetentionCleanup() {
+        guestService.cleanupExpiredGuests();
         return retentionService.cleanupRetention();
     }
 
@@ -130,6 +149,8 @@ public class AdminService {
             String userId,
             String username,
             String displayName,
+            UserRole role,
+            boolean isGuest,
             String clientIp,
             String userAgent,
             Instant createdAt,

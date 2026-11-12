@@ -6,34 +6,59 @@
 [![Spring Boot 3.3.5](https://img.shields.io/badge/Spring%20Boot-3.3.5-00b4d8.svg?style=flat-square&logo=springboot)](https://spring.io/projects/spring-boot)
 [![SQLite WAL](https://img.shields.io/badge/SQLite-WAL%20Mode-10b981.svg?style=flat-square&logo=sqlite)](https://www.sqlite.org/)
 [![License MIT](https://img.shields.io/badge/License-MIT-f8fafc.svg?style=flat-square)](LICENSE)
-[![Offline First](https://img.shields.io/badge/Network-100%25%20Offline%20First-fbbf24.svg?style=flat-square)](#)
+[![Offline First](https://img.shields.io/badge/Network-100%25%20Offline%20Air--Gapped-fbbf24.svg?style=flat-square)](#)
 
 ---
 
 ## 1. Overview
 
-**GhostNet** is a genuine, private, offline-first networking and real-time communication platform engineered in Java. It enables multiple laptops, smartphones, and tablets to communicate seamlessly across a locally hosted wireless network **without requiring Internet access, cellular data, or external cloud infrastructure**.
+**GhostNet** is a genuine, private, offline-first networking and operational communication platform engineered in Java 21 LTS. It turns any laptop into a self-hosted local communication hub accessible to smartphones, tablets, and computers across a private wireless hotspot **without requiring Internet connectivity, cellular mobile data, or external cloud infrastructure**.
 
-The host's laptop functions as the primary application server. Connected peers access GhostNet through ordinary mobile or desktop web browsers without installing any client applications.
+Connected clients communicate through ordinary web browsers without installing native apps or browser extensions.
 
 ---
 
 ## 2. Core Capabilities
 
 - **Zero-Internet Operation:** Operates entirely within local Wi-Fi or ad-hoc hotspots without external DNS or third-party cloud dependencies.
-- **Dynamic Interface & IP Discovery:** Automatically detects host network adapters (`wlan0`, `ap0`, `eth0`) and broadcasts reachable local IPv4 addresses.
-- **Secure Authentication & Identities:** Account registration, BCrypt password hashing (strength 12), cryptographically secure session tokens, and automatic host administrator provisioning for the initial account.
-- **Real-Time Direct Messaging:** 1-to-1 private messaging over WebSockets with delivery tracking (`SENT`, `DELIVERED`, `READ`), idempotency deduplication, and persistent SQLite storage.
-- **Communication Rooms:** Public and private rooms, human-friendly short join codes (`GN-XXXX`), optional password protection, capacity limits, participant tracking, and owner moderation (kick members, transfer ownership, delete room).
-- **In-Memory Multi-Device Presence:** Decouples user identity from physical connections, tracking real-time online/offline presence across laptops and smartphones.
-- **Host Administration Dashboard (`/admin.html`):** Real-time telemetry (uptime, active WebSocket connections, online users, message counts, memory and CPU load), active session revocation, database snapshot creation, retention purge, and graceful shutdown.
-- **Dark Futuristic Visual Identity:** Zero-dependency, responsive Single Page Application with dark slate/charcoal aesthetics, neon accents, and embedded vector icons (100% offline, zero CDN dependencies).
-- **SQLite Concurrency & WAL Mode:** File-based embedded persistence with Write-Ahead Logging (`WAL`), `5000ms` busy timeout, foreign key enforcement, and non-blocking `VACUUM INTO` online snapshots.
-- **Message Retention & Privacy:** Configurable retention policy (default 30 days) with automated purge. Message payloads are never exposed in standard server logs.
+- **Three Access Tiers:**
+  1. **Registered Operatives:** Permanent accounts, profile notes, 1-on-1 direct transmissions, communication enclaves, file sharing, and zero-knowledge private encrypted vaults.
+  2. **Ephemeral Guests:** Instant onboarding with only a temporary display name. Ephemeral guests receive a browser device credential (`gdev_...`) to seamlessly restore identity across browser disconnects. Guest uploads expire in 24 hours. Vault access is strictly denied.
+  3. **Host Administrator:** The host laptop administrator (`admin` / `ghostadmin`) has total control over network configuration, storage limits, active sessions, guest identity revocations, and audit telemetry.
+- **Conversation File Sharing:** Upload and download files in 1-on-1 DMs and multi-user room enclaves with drag-and-drop, real-time progress bars, MIME type validation, and SHA-256 integrity checksum badges.
+- **Individual Zero-Knowledge Private Vaults:** Individual encrypted vaults for registered operatives using client-side **WebCrypto AES-256-GCM** with keys derived locally from user PINs using **PBKDF2 (600,000 iterations)**. Ciphertext is streamed to isolated host storage paths (`data/vaults/<user-id>/`). The host server never possesses or sees user PINs, plaintext data, or decryption keys (zero host backdoors).
+- **Physical Storage Segregation:** Secure filesystem layout segregating `vaults/`, `chat-files/`, `temporary/guest-uploads/`, `temporary/transfer-buffers/`, and `backups/`, with hardened path traversal defense and disk quota enforcement.
+- **Engineering Network Console:** 9 integrated operational sections:
+  - `[01] Overview:` Network telemetry, reachable host IP/port, connected clients, free disk gauge.
+  - `[02] Messages:` Direct 1-on-1 private transmissions with file attachments.
+  - `[03] Rooms:` Multi-user enclaves and `#General Mesh` (`GN-MAIN`) with code joining and file sharing.
+  - `[04] File Transfers:` Live Transfer Center tracking active/completed uploads, speeds, and SHA-256 hashes.
+  - `[05] Private Vault:` Client-side encrypted storage with folder breadcrumbs, search, and decrypt actions.
+  - `[06] Network Members:` Local operative & guest directory with online presence indicators.
+  - `[07] Activity Log:` Real-time chronological audit trail of connections and transmissions.
+  - `[08] Settings:` Profile configuration, PIN management, and guest device credential reset.
+  - `[09] Host Admin:` Central host control dashboard for quotas, guests, and storage maintenance.
 
 ---
 
-## 3. Architecture
+## 3. Host Administrator Credentials
+
+On startup, GhostNet automatically provisions the default host administrator:
+
+```
+Web Client URL:        http://<host-ip>:8080/
+Host Admin URL:        http://<host-ip>:8080/admin.html
+
+Default Username:      admin
+Default Password:      ghostadmin
+
+Default Public Room:   #General Mesh (Code: GN-MAIN)
+```
+*(Any user account created with `ROLE_ADMIN` also has full administrator access).*
+
+---
+
+## 4. Architecture
 
 ```
                   ┌─────────────────────────────────────────┐
@@ -53,162 +78,99 @@ The host's laptop functions as the primary application server. Connected peers a
                   │  │  └──────┬──────┘ └──────┬───────┘ │  │
                   │  │         │               │         │  │
                   │  │  ┌──────▼───────────────▼───────┐ │  │
-                  │  │  │       Core Services          │ │  │
-                  │  │  │ (Auth, Rooms, Messaging,     │ │  │
-                  │  │  │  Presence, Network, Admin)   │ │  │
+                  │  │  │       Core Platform          │ │  │
+                  │  │  │ (Auth, Guests, Rooms, Files, │ │  │
+                  │  │  │  Vaults, Transfers, Admin)   │ │  │
                   │  │  └──────────────┬───────────────┘ │  │
                   │  │                 │                 │  │
                   │  │  ┌──────────────▼───────────────┐ │  │
-                  │  │  │     SQLite Database (WAL)    │ │  │
-                  │  │  │      data/ghostnet.db        │ │  │
-                  │  │  └──────────────────────────────┘ │  │
+                  │  │  │       Storage & Persistence  │ │  │
+                  │  │  │ • SQLite WAL (ghostnet.db)   │ │  │
+                  │  │  │ • data/vaults/<user-id>/     │ │  │
+                  │  │  │ • data/chat-files/<conv>/    │ │  │
+                  │  │  │ • data/temporary/guest/      │ │  │
                   │  └───────────────────────────────────┘  │
-                  └────────────────────▲────────────────────┘
-                                       │ Local Wi-Fi (HTTP & WS)
-              ┌────────────────────────┼────────────────────────┐
-              │                        │                        │
-     ┌────────┴────────┐      ┌────────┴────────┐      ┌────────┴────────┐
-     │  Client Phone   │      │  Client Laptop  │      │  Client Tablet  │
-     │ (Safari/Chrome) │      │ (Firefox/Chrome)│      │ (Browser Client)│
-     └─────────────────┘      └─────────────────┘      └─────────────────┘
+                  └────────────────────┬────────────────────┘
+                                       │
+                      HTTP / WebSockets on Local Wi-Fi
+                                       │
+            ┌──────────────────────────┼──────────────────────────┐
+            │                          │                          │
+  ┌─────────▼────────┐       ┌─────────▼────────┐       ┌─────────▼────────┐
+  │  Client Laptop   │       │    Smartphone    │       │     Tablet       │
+  │ (Chrome/Firefox) │       │  (Safari/Chrome) │       │ (Mobile Browser) │
+  └──────────────────┘       └──────────────────┘       └──────────────────┘
 ```
-
-For complete architectural details, see [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md).
 
 ---
 
-## 4. Quick Start
+## 5. Quick Start
 
-### 4.1 Prerequisites
-- **OpenJDK 21 LTS** or newer (`java -version`).
-- Linux, macOS, or Windows host laptop.
+### Prerequisites
+- Linux, macOS, or Windows
+- OpenJDK 21 LTS or higher (`java -version`)
+- Maven wrapper included (`./mvnw`)
 
-### 4.2 Build the Project
-Clone the repository and build the standalone executable JAR:
+### Build
 ```bash
 ./mvnw clean package
 ```
 
-### 4.3 Run the Server
+### Run
 ```bash
-./scripts/start.sh
-# Or directly:
 java -jar target/ghostnet-1.0.0.jar
 ```
-
-The server displays an ASCII startup banner showing reachable local addresses:
+Or run directly in development mode:
+```bash
+./mvnw spring-boot:run
 ```
-========================================================================
-   ____ _   _  ___  ____ _____ _   _ _____ _____
-  / ___| | | |/ _ \/ ___|_   _| \ | | ____|_   _|
- | |  _| |_| | | | \___ \ | | |  \| |  _|   | |
- | |_| |  _  | |_| |___) || | | |\  | |___  | |
-  \____|_| |_|\___/|____/ |_| |_| \_|_____| |_|
 
-  GHOSTNET v1.0.0 — PRIVATE OFFLINE-FIRST PLATFORM
-  YOUR NETWORK. YOUR PEOPLE. YOUR RULES.
+GhostNet will display the reachable local IP address on startup:
+```
 ========================================================================
   Access GhostNet from devices connected to your private Wi-Fi/Hotspot:
-  » http://192.168.12.1:8080 (wlan0)
-  » http://127.0.0.1:8080 (loopback)
+  » http://192.168.1.50:8080 (wlan0)
 ========================================================================
 ```
 
 ---
 
-## 5. Setting Up a Private Hotspot
+## 6. Creating an Offline Hotspot on Linux
 
-### Linux (NetworkManager):
+### Option A: NetworkManager (nmcli) — Recommended
 ```bash
-# Using the helper script:
-./scripts/create-hotspot.sh wlan0 "GhostNet" "ghostnet123"
+# Create and start private wireless hotspot
+nmcli device wifi hotspot ifname wlan0 ssid GhostNet password "ghostnet123"
 
-# Or manually via nmcli:
-nmcli device wifi hotspot ifname wlan0 ssid "GhostNet" password "ghostnet123"
+# Verify IP assigned to host (usually 10.42.0.1 or 192.168.x.x)
+ip addr show wlan0
 ```
 
-### Connecting Client Devices:
-1. On smartphones or laptops, join the Wi-Fi network **GhostNet**.
-2. If Android or iOS prompts *"Network has no internet. Stay connected?"*, select **Yes / Stay Connected**.
-3. Open any web browser and navigate to:
-   ```
-   http://<HOST-IP>:8080
-   ```
-   *(e.g., `http://192.168.12.1:8080`)*
-
-For detailed hotspot troubleshooting and `hostapd` configurations, consult the [HOTSPOT_GUIDE.md](docs/networking/HOTSPOT_GUIDE.md).
-
----
-
-## 6. Project Structure
-
-```
-ghostnet/
-├── src/
-│   ├── main/
-│   │   ├── java/com/ghostnet/
-│   │   │   ├── GhostNetApplication.java       # Bootstrap & IP banner
-│   │   │   ├── admin/                         # Host administration & control
-│   │   │   ├── common/                        # Error response & domain exceptions
-│   │   │   ├── config/                        # Database, WebSocket & MVC configs
-│   │   │   ├── messaging/                     # 1-to-1 DMs & room messages
-│   │   │   ├── monitoring/                    # JVM & system telemetry metrics
-│   │   │   ├── network/                       # Interface discovery & diagnostics
-│   │   │   ├── persistence/                   # Migrations, backup & retention
-│   │   │   ├── room/                          # Room lifecycles, codes & moderation
-│   │   │   ├── security/                      # BCrypt, tokens, interceptor & rate limiting
-│   │   │   ├── session/                       # Auth sessions & in-memory presence
-│   │   │   └── user/                          # Users, profiles & authentication
-│   │   └── resources/
-│   │       ├── application.yml                # Configuration defaults
-│   │       └── static/                        # Self-contained dark futuristic SPA
-│   │           ├── index.html                 # Main chat client
-│   │           ├── admin.html                 # Host admin dashboard
-│   │           ├── css/ghostnet.css           # Futuristic dark visual theme
-│   │           └── js/                        # Pure offline vector icons & scripts
-│   └── test/java/com/ghostnet/                # JUnit 5 integration & unit test suite
-├── docs/
-│   ├── architecture/ARCHITECTURE.md           # System architecture specification
-│   ├── networking/HOTSPOT_GUIDE.md            # Linux hotspot & network isolation guide
-│   └── development/DEVELOPMENT.md             # Developer build reference
-├── scripts/
-│   ├── start.sh                               # Launch script
-│   ├── create-hotspot.sh                      # NetworkManager hotspot spawner
-│   ├── backup.sh                              # Database snapshot script
-│   └── diagnostics.sh                         # Network connectivity probe
-├── pom.xml                                    # Maven dependencies & plugins
-├── LICENSE                                    # MIT License
-└── README.md                                  # Project overview
-```
+### Option B: Linux Wi-Fi Hotspot GUI
+1. Open **Settings** → **Wi-Fi** → Click **Turn On Wi-Fi Hotspot...**
+2. Set Network Name to `GhostNet` and enter a password.
+3. Connected devices can now navigate to `http://<host-ip>:8080/`.
 
 ---
 
 ## 7. Testing & Verification
 
-GhostNet includes comprehensive automated JUnit 5 tests covering persistence, authentication, rate limiting, room joining, direct messaging, and telemetry:
+GhostNet includes comprehensive test suites covering unit logic, integration flows, and the **Mandatory Testing Scenarios A through H**:
 
 ```bash
+# Run all 52 platform tests
 ./mvnw clean test
+
+# Run Mandatory Scenarios A–H specifically
+./mvnw test -Dtest=PlatformScenariosTests
 ```
 
-### Verified Test Scope:
-- **Authentication & User Management:** Registration, case-insensitive uniqueness, first-user `ROLE_ADMIN` assignment, BCrypt password matching, profile updates, and password changes.
-- **Presence & Sessions:** Multi-connection presence tracking, session revocation, and expiration cleanup.
-- **Room Management:** Room creation, unique human-readable code generation (`GN-XXXX`), password validation, capacity enforcement, participant kick moderation, ownership transfer, and auto-deletion.
-- **Messaging:** Direct messaging delivery status (`SENT`, `DELIVERED`, `READ`), idempotency caching, room broadcast isolation, and history pagination.
-- **Database & Persistence:** SQLite WAL mode pragmas, schema migrations, online snapshots, and message retention purge.
-- **Host Administration:** Network interface resolution, local vs external connectivity diagnostics, and telemetry metrics.
-
----
-
-## 8. Scope Boundaries (Version 1.0)
-
-As specified in the Master Specification:
-- **Strictly Offline V1:** No AI or cloud LLMs, no remote Internet dependencies, no external CDN calls, no WebRTC/video calls, and no distributed multi-server federation.
-- **Focus:** Complete reliability, architectural clarity, security, and rock-solid private Wi-Fi communication.
-
----
-
-## 9. License
-
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+### Verified Scenarios:
+- **Scenario A:** Direct message file sharing between two registered operatives with third-party isolation.
+- **Scenario B:** Room message file sharing with non-member access denial.
+- **Scenario C:** Private vault isolation (User A cannot see or access User B's vault files).
+- **Scenario D:** Ephemeral guest temporary access, file sharing, and temporary directory segregation.
+- **Scenario E:** Guest vault rejection (guests attempting vault access receive `403 Forbidden`).
+- **Scenario F:** Returning guest device recognition and identity restoration via random device credential.
+- **Scenario G:** Storage limits and quota enforcement.
+- **Scenario H:** Path traversal security defense (`../` neutralization and storage root enforcement).

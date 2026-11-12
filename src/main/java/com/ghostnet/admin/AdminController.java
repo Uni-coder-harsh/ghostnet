@@ -61,6 +61,17 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getActiveSessions());
     }
 
+    @GetMapping("/guests")
+    public ResponseEntity<List<com.ghostnet.guest.GuestIdentityRecord>> getActiveGuests() {
+        return ResponseEntity.ok(adminService.getActiveGuests());
+    }
+
+    @DeleteMapping("/guests/{guestId}")
+    public ResponseEntity<Void> revokeGuest(@PathVariable String guestId) {
+        adminService.revokeGuest(guestId);
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/sessions/{token}")
     public ResponseEntity<Void> revokeSession(@PathVariable String token) {
         adminService.revokeSession(token);
