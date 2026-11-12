@@ -584,13 +584,40 @@
   // 4. CONSOLE NAVIGATION & VIEW SWITCHING
   // =========================================================================
 
+  function renderUnauthenticatedChatNotice() {
+    myRoomsList.innerHTML = `
+      <div style="padding: 16px 12px; text-align: center; background: var(--bg-surface); border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin: 6px 0;">
+        <div style="color: var(--neon-cyan); margin-bottom: 6px; font-weight: 700; font-size: 0.85rem;">Authentication Required</div>
+        <p style="font-size: 0.78rem; color: var(--text-dim); margin-bottom: 12px; line-height: 1.4;">
+          Join as a guest or log in to create rooms and chat.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('joinGuestQuickBtn').click()" style="color: var(--bg-darkest); font-weight: bold;">
+            Join as Guest (Instant)
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('loginOpenBtn').click()">
+            Login / Register
+          </button>
+        </div>
+      </div>
+    `;
+    publicRoomsList.innerHTML = `<div style="font-size: 0.78rem; color: var(--text-dim); padding: 8px 12px;">Login to discover public rooms</div>`;
+    usersList.innerHTML = `<div style="font-size: 0.78rem; color: var(--text-dim); padding: 8px 12px;">Login to message operatives</div>`;
+    emptyChatPlaceholder.style.display = 'block';
+    activeChatContainer.style.display = 'none';
+  }
+
   function switchView(viewId, subParam = null) {
-    document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.view-panel').forEach(p => {
+      p.classList.remove('active');
+      p.style.display = 'none';
+    });
     document.querySelectorAll('.console-nav-btn').forEach(b => b.classList.remove('active'));
 
     const targetPanel = document.getElementById(viewId);
     if (targetPanel) {
       targetPanel.classList.add('active');
+      targetPanel.style.display = (viewId === 'viewChat') ? 'flex' : 'block';
     }
 
     // Highlight corresponding nav button
@@ -607,9 +634,19 @@
       } else {
         tabRoomsBtn.click();
       }
+      if (currentUser) {
+        loadSidebarData();
+      } else {
+        renderUnauthenticatedChatNotice();
+      }
     } else if (viewId === 'viewTransfers') {
       renderTransfers();
     } else if (viewId === 'viewVault') {
+      if (!currentUser) {
+        showToast('Please login or join as guest to access private vault', 'info');
+        openGuestModal();
+        return;
+      }
       renderVaultView();
     } else if (viewId === 'viewMembers') {
       loadMembersDirectory();
@@ -709,13 +746,34 @@
       loadUsers(false, q);
     });
 
-    // Room Modals
-    document.getElementById('openCreateRoomBtn').addEventListener('click', () => createRoomModal.classList.add('active'));
+    // Room Modals & Quick Action Buttons
+    const openCreateRoomHandler = () => {
+      if (!currentUser) {
+        showToast('Please login or join as a guest to create a room', 'info');
+        openGuestModal();
+        return;
+      }
+      createRoomModal.classList.add('active');
+    };
+
+    const openJoinRoomHandler = () => {
+      if (!currentUser) {
+        showToast('Please login or join as a guest to join a room', 'info');
+        openGuestModal();
+        return;
+      }
+      joinRoomModal.classList.add('active');
+    };
+
+    document.getElementById('openCreateRoomBtn')?.addEventListener('click', openCreateRoomHandler);
+    document.getElementById('quickCreateRoomBtn')?.addEventListener('click', openCreateRoomHandler);
+    document.getElementById('openJoinRoomBtn')?.addEventListener('click', openJoinRoomHandler);
+    document.getElementById('quickJoinRoomBtn')?.addEventListener('click', openJoinRoomHandler);
+
     document.getElementById('closeCreateRoomModalBtn').addEventListener('click', () => createRoomModal.classList.remove('active'));
     document.getElementById('cancelCreateRoomBtn').addEventListener('click', () => createRoomModal.classList.remove('active'));
     document.getElementById('createRoomForm').addEventListener('submit', handleCreateRoomSubmit);
 
-    document.getElementById('openJoinRoomBtn').addEventListener('click', () => joinRoomModal.classList.add('active'));
     document.getElementById('closeJoinRoomModalBtn').addEventListener('click', () => joinRoomModal.classList.remove('active'));
     document.getElementById('cancelJoinRoomBtn').addEventListener('click', () => joinRoomModal.classList.remove('active'));
     document.getElementById('joinRoomForm').addEventListener('submit', handleJoinRoomSubmit);
@@ -813,6 +871,10 @@
   }
 
   async function loadRooms(silent = false) {
+    if (!currentUser) {
+      renderUnauthenticatedChatNotice();
+      return;
+    }
     try {
       const res = await authFetch('/api/rooms/my');
       if (res.ok) {
@@ -820,6 +882,8 @@
         renderMyRooms(myRooms);
         document.getElementById('roomsTabCount').textContent = myRooms.length.toString();
         document.getElementById('roomsBadgeCount').textContent = myRooms.length.toString();
+      } else if (res.status === 401) {
+        renderUnauthenticatedChatNotice();
       }
 
       const pubRes = await authFetch('/api/rooms/public');
@@ -835,7 +899,7 @@
   function renderMyRooms(rooms) {
     myRoomsList.innerHTML = '';
     if (rooms.length === 0) {
-      myRoomsList.innerHTML = `<div style="font-size: 0.78rem; color: var(--text-dim); padding: 8px 12px;">No active enclaves</div>`;
+      myRoomsList.innerHTML = `<div style="font-size: 0.78rem; color: var(--text-dim); padding: 8px 12px;">No enclaves joined yet. Click <strong>Create Room</strong> above or join by code.</div>`;
       return;
     }
 

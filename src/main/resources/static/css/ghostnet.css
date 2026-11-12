@@ -926,6 +926,16 @@ body {
 }
 
 /* Main View Panels */
+#viewChat {
+  padding: 0 !important;
+  height: calc(100vh - var(--header-height)) !important;
+  overflow: hidden !important;
+}
+
+#viewChat.active {
+  display: flex !important;
+}
+
 .view-panel {
   flex: 1;
   height: calc(100vh - var(--header-height));

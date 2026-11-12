@@ -56,7 +56,8 @@ public class MessageController {
         SendRoomMessageRequest effectiveReq = new SendRoomMessageRequest(
                 effectiveRoomId,
                 request.content(),
-                request.clientMessageId()
+                request.clientMessageId(),
+                request.attachmentId()
         );
         RoomMessageDto sent = messagingService.sendRoomMessage(current.id(), effectiveReq);
         return ResponseEntity.ok(sent);
